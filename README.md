@@ -2,9 +2,9 @@
 
 ARM64-only Magisk / KernelSU / APatch module repository for a curated root-shell toolkit.
 
-**Policy:** prebuilt binaries only. This repository does **not** compile any tool from source. `rclone` is intentionally excluded.
+**Hard policy:** prebuilt binaries only. This Git repository never vendors or tracks downloaded executables. It does **not** compile any tool from source. `rclone` is intentionally excluded.
 
-## Included tool manifest
+## Toolkit
 
 Core: `busybox toybox bash sqlite3 jq yq coreutils zsh git`
 
@@ -18,21 +18,72 @@ Transfer / network: `curl aria2c rsync socat`
 
 Debug: `strace ltrace lsof`
 
-`lz4` is currently marked optional until the resolver finds a qualifying prebuilt. The package job will not compile it.
+`lz4` is optional until its resolver finds a qualifying prebuilt. There is never a source-build fallback.
 
-## How it works
+## Source-only repository design
 
-`manifest/sources.json` is the source of truth. `scripts/fetch.py` downloads only ARM64 prebuilts from the declared upstream/provider sources, extracts the requested executable, verifies it is AArch64, records provenance and SHA-256, and enforces the static-link policy.
+The repository contains only scripts, module metadata and source/provenance metadata.
 
-Some providers publish Android executables that are static; others may link only against standard Android/Bionic libraries. Those exceptions must be explicitly declared in the manifest. Git from bnsmb is currently such an explicit exception candidate and will be recorded as static or dynamic by the generated provenance report.
+Downloaded executables default to the external cache:
 
-## Build the module package
+```text
+${XDG_CACHE_HOME:-$HOME/.cache}/arm64-static-tools-module/
+```
 
-No tool source code is built. "Build" here means **download, verify, and package**:
+They are never copied into a tracked repository directory. Packaging materializes the locked binaries directly from that cache into a temporary directory and deletes the staging tree afterward.
+
+`make check` also runs `scripts/check_repo_purity.py`, which fails if Git tracks an ELF executable, archive payload, generated module ZIP, or anything under `module/system/bin/`.
+
+You can override the external cache location with:
 
 ```sh
+export STATIC_TOOLS_CACHE=/some/path
+```
+
+or pass `--cache-dir` directly to `scripts/fetch.py`.
+
+## Update model
+
+There are deliberately two different operations.
+
+### Check for/download newer approved prebuilts
+
+```sh
+make update
+```
+
+This:
+
+1. resolves each provider's current approved ARM64 prebuilt;
+2. downloads it to the external cache;
+3. verifies AArch64 ELF architecture;
+4. checks static linkage / declared Android-system-library exceptions;
+5. computes source-download and final-executable SHA-256 hashes;
+6. updates **metadata only** in `manifest/lock.json`;
+7. writes `build/update-report.md` and `build/update-report.json`.
+
+The report separates `UPDATED`, `ADDED`, `UNCHANGED`, and `FAILED` entries. An optional tool that temporarily cannot be resolved keeps its previous lock entry when one exists.
+
+`manifest/lock.json` is intended to be committed. It contains URLs, versions, hashes, sizes and ELF qualification metadata — **not binaries**.
+
+### Re-fetch exactly the locked set
+
+```sh
+make fetch
+```
+
+This does **not** look for updates. It fetches the URLs in `manifest/lock.json`, verifies both the downloaded source checksum and extracted executable checksum, re-runs ELF qualification, and caches the executable outside the repository.
+
+## Package the module
+
+After the first metadata update:
+
+```sh
+make update
 make package
 ```
+
+`make package` is intentionally reproducible: it consumes `manifest/lock.json` and will not silently move to newer versions.
 
 Output:
 
@@ -42,33 +93,67 @@ dist/arm64-static-tools-<version>.zip.sha256
 build/provenance.json
 ```
 
-To fetch/test only one or more entries:
+`dist/` and `build/` are ignored generated outputs. The actual downloaded executables remain in the external cache, while the module staging directory is temporary.
+
+For the convenience behavior “refresh first, then package”:
 
 ```sh
-python3 scripts/fetch.py --only git --only zsh
+make release
 ```
 
-## Module layout
+## Install locally
 
-The package installs files systemlessly under `/system/bin`, making them naturally available to root/ADB shells. The repository never writes directly to the physical `/system` partition.
+On the rooted Android device:
 
-Because several tools overlap with Android/Toybox applets, the manifest favors standalone names and a multicall `coreutils` binary rather than generating hundreds of uutils symlinks automatically.
+```sh
+make install
+```
 
-## Sources
+That packages the **locked** toolset and then `scripts/install.sh` attempts the available root-module CLI in this order: Magisk, KernelSU, APatch.
 
-Current providers include:
+You can force one:
 
-- `bnsmb/binaries-for-Android` — ARM64 Android binaries; project states entries are either static or depend only on Android standard libraries.
-- `bnsmb/clang19_toolchain_for_android` — source for the prebuilt ARM64 Android Git executable.
-- `osm0sis/android-busybox-ndk`
-- `rojenzaman/sqlite3-magisk-module`
-- official upstream release assets for jq, yq, uutils/coreutils, ripgrep, fd, fzf and zoxide.
-- maintained static-binary collections for selected classic Unix tools.
+```sh
+MODULE_MANAGER=magisk make install
+MODULE_MANAGER=kernelsu make install
+MODULE_MANAGER=apatch make install
+```
 
-Exact resolved URLs, versions, checksums and ELF linkage are written to `build/provenance.json` at packaging time.
+If no supported CLI is exposed, the script leaves the ZIP untouched and tells you to install it from the root manager UI.
 
-## Validation policy
+## Update only selected tools
 
-Every downloaded executable must resolve as AArch64/ARM64. Entries marked `static: required` fail packaging if `readelf` finds an ELF interpreter or `DT_NEEDED` libraries. Entries marked `static: preferred` are recorded in provenance and are accepted only where the manifest explicitly permits the Android-system-library case.
+For investigation or targeted refreshes:
 
-The CI runner performs the networked fetch. Local syntax/manifest checks can be run without network using `make check`.
+```sh
+python3 scripts/fetch.py --mode update --only git --only zsh
+```
+
+Unselected existing lock entries are preserved.
+
+## Module behavior
+
+The ZIP installs tools systemlessly under `/system/bin`; it never modifies the physical `/system` partition. `customize.sh` rejects non-ARM64 devices and sets module permissions.
+
+Overlapping command families are kept conservative. BusyBox/Toybox/uutils are delivered as their own binaries rather than automatically creating hundreds of conflicting applet symlinks.
+
+## Sources and qualification
+
+`manifest/sources.json` is the source-of-truth resolver policy. Current providers include bnsmb Android prebuilts, BusyBox NDK, the SQLite Magisk module, and official ARM64 release assets for projects such as jq, yq, uutils/coreutils, ripgrep, fd, fzf and zoxide.
+
+Every required-static executable must have no ELF interpreter and no `DT_NEEDED` entries. A dynamically linked executable is accepted only when its manifest entry explicitly permits Android system libraries. Git from the bnsmb ARM64 Android toolchain is currently treated this way and its actual linkage is recorded in the lock/provenance metadata.
+
+The lock records both the downloaded source/archive SHA-256 and the extracted executable SHA-256, preventing a mutable upstream URL from silently changing the package.
+
+## Useful commands
+
+```sh
+make check       # manifest + source-only Git purity + syntax checks
+make update      # resolve latest approved prebuilts; update metadata lock/report
+make fetch       # fetch and verify the exact locked set
+make package     # package the exact locked set
+make release     # update + package
+make install     # package locked set + try local root-manager installation
+make clean       # remove repo-local generated metadata/artifacts only
+make clean-cache # remove external downloaded-binary cache
+```

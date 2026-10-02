@@ -1,124 +1,415 @@
 #!/usr/bin/env python3
+"""Resolve/fetch approved ARM64 prebuilts without ever vendoring them in Git.
+
+Modes:
+  update  Resolve current provider state, download+qualify tools into an external
+          cache, and update metadata-only manifest/lock.json plus an update report.
+  locked  Re-fetch exactly the URLs/checksums recorded in manifest/lock.json and
+          optionally export qualified executables to a temporary staging directory.
+"""
 from __future__ import annotations
-import argparse, fnmatch, hashlib, json, os, re, shutil, stat, subprocess, sys, tarfile, tempfile, urllib.request, zipfile
+
+import argparse
+import fnmatch
+import hashlib
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+import zipfile
 from pathlib import Path
 
-UA = "arm64-static-tools-module/0.1"
+ROOT = Path(__file__).resolve().parent.parent
+UA = "arm64-static-tools-module/0.2"
 
-def req_json(url):
-    r = urllib.request.Request(url, headers={"User-Agent": UA, "Accept":"application/vnd.github+json"})
+
+def req_json(url: str):
+    r = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
     tok = os.getenv("GITHUB_TOKEN")
-    if tok: r.add_header("Authorization", f"Bearer {tok}")
-    with urllib.request.urlopen(r) as f: return json.load(f)
+    if tok:
+        r.add_header("Authorization", f"Bearer {tok}")
+    with urllib.request.urlopen(r) as f:
+        return json.load(f)
 
-def download(url, dst: Path):
+
+def stream_download(url: str, dst: Path):
     dst.parent.mkdir(parents=True, exist_ok=True)
     r = urllib.request.Request(url, headers={"User-Agent": UA})
     tok = os.getenv("GITHUB_TOKEN")
-    if tok and "api.github.com" in url: r.add_header("Authorization", f"Bearer {tok}")
-    with urllib.request.urlopen(r) as src, open(dst,"wb") as out: shutil.copyfileobj(src,out)
+    if tok and ("github.com" in url or "githubusercontent.com" in url):
+        r.add_header("Authorization", f"Bearer {tok}")
+    with urllib.request.urlopen(r) as src, dst.open("wb") as out:
+        shutil.copyfileobj(src, out)
 
-def latest_asset(repo, regex):
-    rel = req_json(f"https://api.github.com/repos/{repo}/releases/latest")
-    pat = re.compile(regex)
-    matches = [a for a in rel.get("assets",[]) if pat.search(a["name"])]
-    if not matches: raise RuntimeError(f"{repo}: no latest-release asset matches {regex!r}")
-    return rel.get("tag_name") or rel.get("name"), matches[0]["browser_download_url"], matches[0]["name"]
 
-def repo_file(repo, paths):
-    for p in paths:
-        try:
-            meta=req_json(f"https://api.github.com/repos/{repo}/contents/{p}")
-            if meta.get("download_url"): return meta.get("sha") or "repo", meta["download_url"], Path(p).name
-        except Exception: pass
-    raise RuntimeError(f"{repo}: none of candidate paths exist: {paths}")
-
-def repo_glob(repo, globs):
-    meta=req_json(f"https://api.github.com/repos/{repo}")
-    branch=meta.get("default_branch","main")
-    ref=req_json(f"https://api.github.com/repos/{repo}/git/refs/heads/{branch}")
-    sha=ref["object"]["sha"]
-    tree=req_json(f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1")
-    if tree.get("truncated"):
-        raise RuntimeError(f"{repo}: recursive tree truncated")
-    files=[x for x in tree.get("tree",[]) if x.get("type")=="blob"]
-    for g in globs:
-        for item in files:
-            path=item["path"]
-            if fnmatch.fnmatch(path,g) or fnmatch.fnmatch(Path(path).name,g):
-                url=f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
-                return sha, url, Path(path).name
-    raise RuntimeError(f"{repo}: no file matches {globs}")
-
-def extract_one(src: Path, pick_regex: str|None, work: Path):
-    if not pick_regex: return src
-    pat=re.compile(pick_regex)
-    outdir=work/"extract"; outdir.mkdir(parents=True, exist_ok=True)
-    name=src.name.lower()
-    if zipfile.is_zipfile(src):
-        with zipfile.ZipFile(src) as z:
-            names=[n for n in z.namelist() if pat.search(n) and not n.endswith('/')]
-            if not names: raise RuntimeError(f"no member matches {pick_regex}")
-            member=names[0]; z.extract(member,outdir); return outdir/member
-    try:
-        if tarfile.is_tarfile(src):
-            with tarfile.open(src,"r:*") as t:
-                members=[m for m in t.getmembers() if m.isfile() and pat.search(m.name)]
-                if not members: raise RuntimeError(f"no member matches {pick_regex}")
-                t.extract(members[0],outdir,filter="data"); return outdir/members[0].name
-    except TypeError:
-        with tarfile.open(src,"r:*") as t:
-            members=[m for m in t.getmembers() if m.isfile() and pat.search(m.name)]
-            if not members: raise RuntimeError(f"no member matches {pick_regex}")
-            t.extract(members[0],outdir); return outdir/members[0].name
-    raise RuntimeError(f"archive not recognized: {src}")
-
-def run(*cmd): return subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False).stdout
-
-def elf_info(path: Path):
-    info={"file":run("file","-b",str(path)).strip(),"needed":[],"interpreter":None}
-    if "aarch64" not in info["file"].lower() and "arm64" not in info["file"].lower():
-        raise RuntimeError(f"not AArch64: {info['file']}")
-    rd=shutil.which("readelf")
-    if rd:
-        dyn=run(rd,"-d",str(path)); info["needed"]=re.findall(r"Shared library: \[(.*?)\]",dyn)
-        prog=run(rd,"-l",str(path)); m=re.search(r"Requesting program interpreter:\s*(.*?)\]",prog); info["interpreter"]=m.group(1) if m else None
-    return info
-
-def sha256(path):
-    h=hashlib.sha256()
-    with open(path,"rb") as f:
-        for b in iter(lambda:f.read(1024*1024),b""): h.update(b)
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for b in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(b)
     return h.hexdigest()
 
-def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--manifest",default="manifest/sources.json"); ap.add_argument("--out",default="build/bin"); ap.add_argument("--only",action="append",default=[]); args=ap.parse_args()
-    cfg=json.load(open(args.manifest)); out=Path(args.out); out.mkdir(parents=True,exist_ok=True); prov=[]
-    for t in cfg["tools"]:
-        if args.only and t["name"] not in args.only: continue
-        print(f"==> {t['name']} ({t['provider']})")
+
+def latest_asset(repo: str, regex: str):
+    rel = req_json(f"https://api.github.com/repos/{repo}/releases/latest")
+    pat = re.compile(regex)
+    matches = [a for a in rel.get("assets", []) if pat.search(a["name"])]
+    if not matches:
+        raise RuntimeError(f"{repo}: no latest-release asset matches {regex!r}")
+    a = matches[0]
+    return rel.get("tag_name") or rel.get("name") or "release", a["browser_download_url"], a["name"]
+
+
+def repo_file(repo: str, paths: list[str]):
+    for p in paths:
         try:
-            with tempfile.TemporaryDirectory() as td:
-                td=Path(td)
-                kind=t["kind"]
-                if kind=="direct": ver="direct"; url=t["url"]; fn=Path(url).name
-                elif kind=="github_release_asset": ver,url,fn=latest_asset(t["provider"],t["asset_regex"])
-                elif kind=="github_repo_file": ver,url,fn=repo_file(t["provider"],t["path_candidates"])
-                elif kind=="github_repo_file_glob": ver,url,fn=repo_glob(t["provider"],t["glob_candidates"])
-                else: raise RuntimeError(f"unknown kind {kind}")
-                dl=td/fn; download(url,dl); chosen=extract_one(dl,t.get("pick_regex"),td)
-                dest=out/t["name"]; shutil.copy2(chosen,dest); dest.chmod(dest.stat().st_mode|stat.S_IXUSR|stat.S_IXGRP|stat.S_IXOTH)
-                ei=elf_info(dest)
-                is_static=(not ei["needed"] and not ei["interpreter"])
-                policy=t.get("static","preferred")
-                if policy=="required" and not is_static:
-                    raise RuntimeError(f"{t['name']} is not fully static; needed={ei['needed']} interp={ei['interpreter']}")
-                if not is_static and not t.get("allow_android_system_libs",False) and policy!="preferred":
-                    raise RuntimeError(f"dynamic binary without explicit exception: {t['name']}")
-                prov.append({"name":t["name"],"provider":t["provider"],"version":ver,"url":url,"sha256":sha256(dest),"static":is_static,**ei})
+            meta = req_json(f"https://api.github.com/repos/{repo}/contents/{p}")
+            if meta.get("download_url"):
+                return meta.get("sha") or "repo", meta["download_url"], Path(p).name
+        except Exception:
+            pass
+    raise RuntimeError(f"{repo}: none of candidate paths exist: {paths}")
+
+
+def repo_glob(repo: str, globs: list[str]):
+    meta = req_json(f"https://api.github.com/repos/{repo}")
+    branch = meta.get("default_branch", "main")
+    ref = req_json(f"https://api.github.com/repos/{repo}/git/refs/heads/{branch}")
+    commit = ref["object"]["sha"]
+    tree = req_json(f"https://api.github.com/repos/{repo}/git/trees/{commit}?recursive=1")
+    if tree.get("truncated"):
+        raise RuntimeError(f"{repo}: recursive tree truncated")
+    files = [x for x in tree.get("tree", []) if x.get("type") == "blob"]
+    for g in globs:
+        for item in files:
+            path = item["path"]
+            if fnmatch.fnmatch(path, g) or fnmatch.fnmatch(Path(path).name, g):
+                url = f"https://raw.githubusercontent.com/{repo}/{commit}/{path}"
+                return commit, url, Path(path).name
+    raise RuntimeError(f"{repo}: no file matches {globs}")
+
+
+def resolve_source(tool: dict):
+    kind = tool["kind"]
+    if kind == "direct":
+        return "direct", tool["url"], Path(tool["url"]).name
+    if kind == "github_release_asset":
+        return latest_asset(tool["provider"], tool["asset_regex"])
+    if kind == "github_repo_file":
+        return repo_file(tool["provider"], tool["path_candidates"])
+    if kind == "github_repo_file_glob":
+        return repo_glob(tool["provider"], tool["glob_candidates"])
+    raise RuntimeError(f"unknown source kind {kind}")
+
+
+def extract_one(src: Path, pick_regex: str | None, work: Path) -> Path:
+    if not pick_regex:
+        return src
+    pat = re.compile(pick_regex)
+    outdir = work / "extract"
+    outdir.mkdir(parents=True, exist_ok=True)
+    if zipfile.is_zipfile(src):
+        with zipfile.ZipFile(src) as z:
+            names = [n for n in z.namelist() if pat.search(n) and not n.endswith("/")]
+            if not names:
+                raise RuntimeError(f"no ZIP member matches {pick_regex}")
+            member = names[0]
+            z.extract(member, outdir)
+            return outdir / member
+    if tarfile.is_tarfile(src):
+        with tarfile.open(src, "r:*") as t:
+            members = [m for m in t.getmembers() if m.isfile() and pat.search(m.name)]
+            if not members:
+                raise RuntimeError(f"no tar member matches {pick_regex}")
+            try:
+                t.extract(members[0], outdir, filter="data")
+            except TypeError:  # Python < 3.12
+                t.extract(members[0], outdir)
+            return outdir / members[0].name
+    raise RuntimeError(f"archive not recognized: {src}")
+
+
+def run(*cmd: str) -> str:
+    p = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+    return p.stdout
+
+
+def elf_info(path: Path):
+    file_cmd = shutil.which("file")
+    if not file_cmd:
+        raise RuntimeError("host prerequisite missing: file")
+    info = {"file": run(file_cmd, "-b", str(path)).strip(), "needed": [], "interpreter": None}
+    lower = info["file"].lower()
+    if "elf" not in lower:
+        raise RuntimeError(f"not ELF: {info['file']}")
+    if "aarch64" not in lower and "arm64" not in lower:
+        raise RuntimeError(f"not AArch64: {info['file']}")
+    rd = shutil.which("readelf")
+    if not rd:
+        raise RuntimeError("host prerequisite missing: readelf (binutils)")
+    dyn = run(rd, "-d", str(path))
+    info["needed"] = re.findall(r"Shared library: \[(.*?)\]", dyn)
+    prog = run(rd, "-l", str(path))
+    m = re.search(r"Requesting program interpreter:\s*(.*?)\]", prog)
+    info["interpreter"] = m.group(1) if m else None
+    return info
+
+
+def qualify(tool: dict, path: Path):
+    ei = elf_info(path)
+    is_static = not ei["needed"] and not ei["interpreter"]
+    policy = tool.get("static", "preferred")
+    if policy == "required" and not is_static:
+        raise RuntimeError(f"not fully static; needed={ei['needed']} interp={ei['interpreter']}")
+    if not is_static and not tool.get("allow_android_system_libs", False):
+        raise RuntimeError(
+            f"dynamic binary without explicit Android-system-library exception; "
+            f"needed={ei['needed']} interp={ei['interpreter']}"
+        )
+    return {"static": is_static, **ei}
+
+
+def cache_root(value: str | None) -> Path:
+    if value:
+        return Path(value).expanduser().resolve()
+    env = os.getenv("STATIC_TOOLS_CACHE")
+    if env:
+        return Path(env).expanduser().resolve()
+    base = Path(os.getenv("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return (base / "arm64-static-tools-module").resolve()
+
+
+def cache_source(url: str, cache: Path, expected_sha: str | None = None) -> tuple[Path, str]:
+    downloads = cache / "downloads"
+    downloads.mkdir(parents=True, exist_ok=True)
+    if expected_sha:
+        existing = downloads / expected_sha
+        if existing.is_file() and sha256(existing) == expected_sha:
+            return existing, expected_sha
+    with tempfile.NamedTemporaryFile(prefix="download-", dir=downloads, delete=False) as tf:
+        tmp = Path(tf.name)
+    try:
+        stream_download(url, tmp)
+        got = sha256(tmp)
+        if expected_sha and got != expected_sha:
+            raise RuntimeError(f"source SHA-256 mismatch: expected {expected_sha}, got {got}")
+        final = downloads / got
+        if not final.exists():
+            os.replace(tmp, final)
+        else:
+            tmp.unlink(missing_ok=True)
+        return final, got
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def materialize_tool(tool: dict, url: str, cache: Path, expected_source_sha: str | None = None,
+                     expected_binary_sha: str | None = None) -> tuple[Path, dict]:
+    source, source_sha = cache_source(url, cache, expected_source_sha)
+    with tempfile.TemporaryDirectory(prefix="qualify-") as td:
+        chosen = extract_one(source, tool.get("pick_regex"), Path(td))
+        binary_sha = sha256(chosen)
+        if expected_binary_sha and binary_sha != expected_binary_sha:
+            raise RuntimeError(f"binary SHA-256 mismatch: expected {expected_binary_sha}, got {binary_sha}")
+        q = qualify(tool, chosen)
+        bindir = cache / "bin" / tool["name"]
+        bindir.mkdir(parents=True, exist_ok=True)
+        cached = bindir / binary_sha
+        if not cached.exists():
+            shutil.copy2(chosen, cached)
+        cached.chmod(cached.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    meta = {
+        "source_sha256": source_sha,
+        "sha256": binary_sha,
+        "size": cached.stat().st_size,
+        **q,
+    }
+    return cached, meta
+
+
+def load_json(path: Path, default):
+    if not path.exists():
+        return default
+    with path.open() as f:
+        return json.load(f)
+
+
+def write_json(path: Path, obj):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w") as f:
+        json.dump(obj, f, indent=2, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def render_report(changes: list[dict]) -> str:
+    buckets = {"UPDATED": [], "ADDED": [], "UNCHANGED": [], "FAILED": []}
+    for c in changes:
+        buckets[c["status"]].append(c)
+    lines = ["# ARM64 Static Tools update report", ""]
+    for status in ("UPDATED", "ADDED", "UNCHANGED", "FAILED"):
+        lines += [f"## {status}", ""]
+        items = buckets[status]
+        if not items:
+            lines += ["_None._", ""]
+            continue
+        for c in items:
+            if status == "UPDATED":
+                lines.append(f"- `{c['name']}`: `{c.get('old_version','?')}` → `{c.get('new_version','?')}`")
+            elif status == "ADDED":
+                lines.append(f"- `{c['name']}`: `{c.get('new_version','?')}`")
+            elif status == "UNCHANGED":
+                lines.append(f"- `{c['name']}`: `{c.get('new_version','?')}`")
+            else:
+                suffix = " (kept previous lock entry)" if c.get("kept_previous") else ""
+                lines.append(f"- `{c['name']}`: {c.get('error','unknown error')}{suffix}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def selected_tools(cfg: dict, only: list[str]) -> list[dict]:
+    tools = cfg["tools"]
+    if not only:
+        return tools
+    wanted = set(only)
+    known = {t["name"] for t in tools}
+    unknown = wanted - known
+    if unknown:
+        raise RuntimeError(f"unknown tool(s): {', '.join(sorted(unknown))}")
+    return [t for t in tools if t["name"] in wanted]
+
+
+def update_mode(cfg: dict, tools: list[dict], cache: Path, lock_path: Path, report_path: Path,
+                export_dir: Path | None):
+    old_lock = load_json(lock_path, {"tools": []})
+    old_by_name = {x["name"]: x for x in old_lock.get("tools", [])}
+    new_by_name = dict(old_by_name)
+    changes = []
+    for t in tools:
+        name = t["name"]
+        print(f"==> resolve {name} ({t['provider']})")
+        try:
+            version, url, asset = resolve_source(t)
+            cached, q = materialize_tool(t, url, cache)
+            if version == "direct":
+                version = f"sha256:{q['sha256'][:12]}"
+            entry = {
+                "name": name,
+                "provider": t["provider"],
+                "version": version,
+                "source_url": url,
+                "source_asset": asset,
+                **q,
+            }
+            old = old_by_name.get(name)
+            status = "ADDED" if old is None else ("UNCHANGED" if old.get("sha256") == entry["sha256"] else "UPDATED")
+            changes.append({"name": name, "status": status, "old_version": old.get("version") if old else None,
+                            "new_version": version})
+            new_by_name[name] = entry
+            if export_dir:
+                export_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(cached, export_dir / name)
         except Exception as e:
+            old = old_by_name.get(name)
             if t.get("optional"):
-                print(f"WARN optional {t['name']}: {e}",file=sys.stderr); continue
-            raise
-    Path("build").mkdir(exist_ok=True); json.dump(prov,open("build/provenance.json","w"),indent=2,sort_keys=True); print(f"Fetched {len(prov)} tools")
-if __name__=="__main__": main()
+                changes.append({"name": name, "status": "FAILED", "error": str(e), "kept_previous": bool(old)})
+                if old is None:
+                    new_by_name.pop(name, None)
+                print(f"WARN optional {name}: {e}", file=sys.stderr)
+                continue
+            raise RuntimeError(f"{name}: {e}") from e
+
+    ordered = []
+    cfg_order = [t["name"] for t in cfg["tools"]]
+    for name in cfg_order:
+        if name in new_by_name:
+            ordered.append(new_by_name[name])
+    lock = {"schema": 1, "architecture": "arm64", "prebuilt_only": True, "tools": ordered}
+    write_json(lock_path, lock)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(render_report(changes) + "\n")
+    json_report = report_path.with_suffix(".json")
+    write_json(json_report, {"changes": changes})
+    print(f"Updated metadata lock: {lock_path}")
+    print(f"Update report: {report_path}")
+
+
+def locked_mode(cfg: dict, tools: list[dict], cache: Path, lock_path: Path, provenance_path: Path,
+                export_dir: Path | None):
+    lock = load_json(lock_path, None)
+    if not lock:
+        raise RuntimeError(f"metadata lock missing: {lock_path}; run `make update` first")
+    locked = {x["name"]: x for x in lock.get("tools", [])}
+    provenance = []
+    for t in tools:
+        name = t["name"]
+        entry = locked.get(name)
+        if entry is None:
+            if t.get("optional"):
+                print(f"WARN optional {name}: not present in lock", file=sys.stderr)
+                continue
+            raise RuntimeError(f"{name}: missing from metadata lock; run `make update`")
+        print(f"==> fetch locked {name} ({entry.get('version','?')})")
+        cached, q = materialize_tool(
+            t,
+            entry["source_url"],
+            cache,
+            expected_source_sha=entry["source_sha256"],
+            expected_binary_sha=entry["sha256"],
+        )
+        # Enforce that current qualification agrees with the metadata lock.
+        for key in ("static", "interpreter", "needed"):
+            if entry.get(key) != q.get(key):
+                raise RuntimeError(f"{name}: qualification drift for {key}: lock={entry.get(key)!r} current={q.get(key)!r}")
+        if export_dir:
+            export_dir.mkdir(parents=True, exist_ok=True)
+            dst = export_dir / name
+            shutil.copy2(cached, dst)
+            dst.chmod(0o755)
+        provenance.append(entry)
+    write_json(provenance_path, {"schema": 1, "architecture": "arm64", "tools": provenance})
+    print(f"Qualified {len(provenance)} locked tools; cache={cache}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mode", choices=("update", "locked"), default="locked")
+    ap.add_argument("--manifest", default=str(ROOT / "manifest/sources.json"))
+    ap.add_argument("--lock", default=str(ROOT / "manifest/lock.json"))
+    ap.add_argument("--cache-dir")
+    ap.add_argument("--report", default=str(ROOT / "build/update-report.md"))
+    ap.add_argument("--provenance", default=str(ROOT / "build/provenance.json"))
+    ap.add_argument("--export-dir")
+    ap.add_argument("--only", action="append", default=[])
+    args = ap.parse_args()
+
+    manifest_path = Path(args.manifest)
+    cfg = load_json(manifest_path, None)
+    if cfg is None:
+        raise SystemExit(f"manifest not found: {manifest_path}")
+    tools = selected_tools(cfg, args.only)
+    cache = cache_root(args.cache_dir)
+    cache.mkdir(parents=True, exist_ok=True)
+    export = Path(args.export_dir).resolve() if args.export_dir else None
+
+    try:
+        if args.mode == "update":
+            update_mode(cfg, tools, cache, Path(args.lock), Path(args.report), export)
+        else:
+            locked_mode(cfg, tools, cache, Path(args.lock), Path(args.provenance), export)
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,1 +1,6 @@
-This directory is reserved for generated provenance and source manifests.
+Generated module metadata is installed here at package time:
+- sources.json: resolver/source policy
+- lock.json: exact source URLs, versions and checksums used for this package
+- provenance.json: package-time qualification record
+
+No binaries are stored in this source directory in Git.

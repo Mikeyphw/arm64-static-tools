@@ -1,5 +1,21 @@
+# Downloaded/generated artifacts are never versioned.
 .cache/
 build/
-dist/*.zip
-*.sha256
+dist/
+.artifacts/
 __pycache__/
+*.pyc
+
+# Root-module/download artifacts must stay out of Git.
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.xz
+*.tar.zst
+*.7z
+*.apk
+*.elf
+*.so
+*.bin
+*.sha256
