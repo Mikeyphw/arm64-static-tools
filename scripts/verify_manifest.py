@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json,sys
-p="manifest/sources.json"; d=json.load(open(p)); names=[x["name"] for x in d["tools"]]
+from pathlib import Path
+root=Path(__file__).resolve().parent.parent
+p=root/"manifest/sources.json"; d=json.load(open(p)); names=[x["name"] for x in d["tools"]]
 assert d["architecture"]=="arm64"
 assert d["policy"]["prebuilt_only"] is True
 assert d["policy"]["build_from_source"] is False
