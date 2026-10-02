@@ -1,0 +1,35 @@
+name: Package ARM64 module
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+  push:
+    paths:
+      - 'manifest/**'
+      - 'scripts/**'
+      - 'module/**'
+      - '.github/workflows/package.yml'
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host prerequisites
+        run: sudo apt-get update && sudo apt-get install -y file binutils zip
+      - name: Verify manifest
+        run: make check
+      - name: Fetch approved ARM64 prebuilts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/fetch.py
+      - name: Package module
+        run: bash scripts/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-static-tools-module
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            build/provenance.json
