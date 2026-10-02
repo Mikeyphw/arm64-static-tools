@@ -33,19 +33,21 @@ def repo_file(repo, paths):
         except Exception: pass
     raise RuntimeError(f"{repo}: none of candidate paths exist: {paths}")
 
-def walk_repo(repo, path=""):
-    items=req_json(f"https://api.github.com/repos/{repo}/contents/{path}")
-    if isinstance(items, dict): items=[items]
-    for item in items:
-        if item["type"]=="file": yield item
-        elif item["type"]=="dir": yield from walk_repo(repo,item["path"])
-
 def repo_glob(repo, globs):
-    files=list(walk_repo(repo))
+    meta=req_json(f"https://api.github.com/repos/{repo}")
+    branch=meta.get("default_branch","main")
+    ref=req_json(f"https://api.github.com/repos/{repo}/git/refs/heads/{branch}")
+    sha=ref["object"]["sha"]
+    tree=req_json(f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1")
+    if tree.get("truncated"):
+        raise RuntimeError(f"{repo}: recursive tree truncated")
+    files=[x for x in tree.get("tree",[]) if x.get("type")=="blob"]
     for g in globs:
         for item in files:
-            if fnmatch.fnmatch(item["path"], g) or fnmatch.fnmatch(item["name"], g):
-                return item.get("sha") or "repo", item["download_url"], item["name"]
+            path=item["path"]
+            if fnmatch.fnmatch(path,g) or fnmatch.fnmatch(Path(path).name,g):
+                url=f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
+                return sha, url, Path(path).name
     raise RuntimeError(f"{repo}: no file matches {globs}")
 
 def extract_one(src: Path, pick_regex: str|None, work: Path):

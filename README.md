@@ -18,7 +18,7 @@ Transfer / network: `curl aria2c rsync socat`
 
 Debug: `strace ltrace lsof`
 
-`lz4` is currently marked optional until a qualifying prebuilt is resolved automatically.
+`lz4` is currently marked optional until the resolver finds a qualifying prebuilt. The package job will not compile it.
 
 ## How it works
 
@@ -66,3 +66,9 @@ Current providers include:
 - maintained static-binary collections for selected classic Unix tools.
 
 Exact resolved URLs, versions, checksums and ELF linkage are written to `build/provenance.json` at packaging time.
+
+## Validation policy
+
+Every downloaded executable must resolve as AArch64/ARM64. Entries marked `static: required` fail packaging if `readelf` finds an ELF interpreter or `DT_NEEDED` libraries. Entries marked `static: preferred` are recorded in provenance and are accepted only where the manifest explicitly permits the Android-system-library case.
+
+The CI runner performs the networked fetch. Local syntax/manifest checks can be run without network using `make check`.

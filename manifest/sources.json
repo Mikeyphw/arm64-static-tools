@@ -10,37 +10,291 @@
     "android_system_libs_exception_requires_explicit_allow": true
   },
   "tools": [
-    {"name":"busybox","provider":"osm0sis/android-busybox-ndk","kind":"github_release_asset","asset_regex":"(?i)(arm64|aarch64).*(busybox|ndk)|busybox.*(arm64|aarch64)","archive":"auto","pick_regex":"(^|/)busybox$","static":"required"},
-    {"name":"toybox","provider":"landley/toybox","kind":"direct","url":"https://landley.net/toybox/downloads/binaries/latest/toybox-aarch64","archive":"none","static":"required"},
-    {"name":"bash","provider":"bnsmb/binaries-for-Android","kind":"github_repo_file","path_candidates":["binaries/bash-static-stripped","binaries/bash-static"],"static":"required"},
-    {"name":"sqlite3","provider":"rojenzaman/sqlite3-magisk-module","kind":"github_release_asset","asset_regex":"(?i)sqlite.*magisk.*(multi|arm64).*\\.zip$","archive":"zip","pick_regex":"(?i)(arm64-v8a|arm64|aarch64).*/?sqlite3$|(^|/)sqlite3$","static":"required"},
-    {"name":"jq","provider":"jqlang/jq","kind":"github_release_asset","asset_regex":"^jq-linux-arm64$","archive":"none","static":"required"},
-    {"name":"yq","provider":"mikefarah/yq","kind":"github_release_asset","asset_regex":"^yq_linux_arm64$","archive":"none","static":"required"},
-    {"name":"coreutils","provider":"uutils/coreutils","kind":"github_release_asset","asset_regex":"(?i)aarch64-unknown-linux-musl.*\\.(tar\\.gz|tgz)$","archive":"tar","pick_regex":"(^|/)coreutils$","static":"required"},
-    {"name":"rg","provider":"BurntSushi/ripgrep","kind":"github_release_asset","asset_regex":"(?i)aarch64-unknown-linux-musl.*\\.tar\\.gz$","archive":"tar","pick_regex":"(^|/)rg$","static":"required"},
-    {"name":"fd","provider":"sharkdp/fd","kind":"github_release_asset","asset_regex":"(?i)aarch64-unknown-linux-musl.*\\.tar\\.gz$","archive":"tar","pick_regex":"(^|/)fd$","static":"required"},
-    {"name":"fzf","provider":"junegunn/fzf","kind":"github_release_asset","asset_regex":"(?i)android_arm64.*\\.tar\\.gz$","archive":"tar","pick_regex":"(^|/)fzf$","static":"required"},
-    {"name":"zoxide","provider":"ajeetdsouza/zoxide","kind":"github_release_asset","asset_regex":"(?i)(aarch64-linux-android|aarch64-unknown-linux-musl).*\\.tar\\.gz$","archive":"tar","pick_regex":"(^|/)zoxide$","static":"required"},
-    {"name":"xxd","provider":"bnsmb/binaries-for-Android","kind":"github_repo_file","path_candidates":["binaries/xxd","binaries/xxd_static"],"static":"preferred"},
-    {"name":"strings","provider":"tiiuae/aarch64_bin_builder","kind":"github_release_asset","asset_regex":"(?i)(binutils|aarch64).*\\.(tar\\.gz|tgz|zip)$","archive":"auto","pick_regex":"(^|/)strings$","static":"required"},
-    {"name":"readelf","provider":"tiiuae/aarch64_bin_builder","kind":"github_release_asset","asset_regex":"(?i)(binutils|aarch64).*\\.(tar\\.gz|tgz|zip)$","archive":"auto","pick_regex":"(^|/)readelf$","static":"required"},
-    {"name":"objdump","provider":"tiiuae/aarch64_bin_builder","kind":"github_release_asset","asset_regex":"(?i)(binutils|aarch64).*\\.(tar\\.gz|tgz|zip)$","archive":"auto","pick_regex":"(^|/)objdump$","static":"required"},
-    {"name":"nm","provider":"tiiuae/aarch64_bin_builder","kind":"github_release_asset","asset_regex":"(?i)(binutils|aarch64).*\\.(tar\\.gz|tgz|zip)$","archive":"auto","pick_regex":"(^|/)nm$","static":"required"},
-    {"name":"7zz","provider":"bnsmb/binaries-for-Android","kind":"github_repo_file","path_candidates":["binaries/7zz_26.03_static","binaries/7zz_static"],"static":"required"},
-    {"name":"zstd","provider":"dawnxoxo/android-static-binaries","kind":"github_repo_file_glob","glob_candidates":["**/zstd","**/zstd_static"],"static":"required"},
-    {"name":"lz4","provider":"dawnxoxo/android-static-binaries","kind":"github_repo_file_glob","glob_candidates":["**/lz4","**/lz4_static"],"static":"required","optional":true},
-    {"name":"xz","provider":"bnsmb/binaries-for-Android","kind":"github_repo_file","path_candidates":["binaries/xz","binaries/xz_static"],"static":"preferred"},
-    {"name":"brotli","provider":"dawnxoxo/android-static-binaries","kind":"github_repo_file_glob","glob_candidates":["**/brotli","**/brotli_static"],"static":"required"},
-    {"name":"pigz","provider":"whoisnian/static-binaries","kind":"github_release_asset","asset_regex":"(?i)(arm64|aarch64).*(pigz)|pigz.*(arm64|aarch64)","archive":"auto","pick_regex":"(^|/)pigz$","static":"required"},
-    {"name":"cpio","provider":"dawnxoxo/android-static-binaries","kind":"github_repo_file_glob","glob_candidates":["**/cpio","**/cpio_static"],"static":"required"},
-    {"name":"curl","provider":"whoisnian/static-binaries","kind":"github_release_asset","asset_regex":"(?i)(arm64|aarch64).*(curl)|curl.*(arm64|aarch64)","archive":"auto","pick_regex":"(^|/)curl$","static":"required"},
-    {"name":"aria2c","provider":"dawnxoxo/android-static-binaries","kind":"github_repo_file_glob","glob_candidates":["**/aria2c","**/aria2c_static"],"static":"required"},
-    {"name":"rsync","provider":"bnsmb/binaries-for-Android","kind":"github_repo_file","path_candidates":["binaries/rsync_3.5.1_static","binaries/rsync_static","binaries/rsync"],"static":"preferred"},
-    {"name":"socat","provider":"whoisnian/static-binaries","kind":"github_release_asset","asset_regex":"(?i)(arm64|aarch64).*(socat)|socat.*(arm64|aarch64)","archive":"auto","pick_regex":"(^|/)socat$","static":"required"},
-    {"name":"strace","provider":"whoisnian/static-binaries","kind":"github_release_asset","asset_regex":"(?i)(arm64|aarch64).*(strace)|strace.*(arm64|aarch64)","archive":"auto","pick_regex":"(^|/)strace$","static":"required"},
-    {"name":"ltrace","provider":"bnsmb/binaries-for-Android","kind":"github_repo_file","path_candidates":["binaries/ltrace_static","binaries/ltrace"],"static":"required"},
-    {"name":"lsof","provider":"whoisnian/static-binaries","kind":"github_release_asset","asset_regex":"(?i)(arm64|aarch64).*(lsof)|lsof.*(arm64|aarch64)","archive":"auto","pick_regex":"(^|/)lsof$","static":"required"},
-    {"name":"zsh","provider":"dawnxoxo/android-static-binaries","kind":"github_repo_file_glob","glob_candidates":["**/zsh","**/zsh_static"],"static":"required"},
-    {"name":"git","provider":"bnsmb/clang19_toolchain_for_android","kind":"github_release_asset","asset_regex":"(?i)clang19.*(arm64|android).*\\.(tar\\.gz|tgz|tar\\.xz|zip)$","archive":"auto","pick_regex":"(^|/)git$","static":"preferred","allow_android_system_libs":true}
+    {
+      "name": "busybox",
+      "provider": "osm0sis/android-busybox-ndk",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)(arm64|aarch64).*(busybox|ndk)|busybox.*(arm64|aarch64)",
+      "archive": "auto",
+      "pick_regex": "(^|/)busybox$",
+      "static": "required"
+    },
+    {
+      "name": "toybox",
+      "provider": "landley/toybox",
+      "kind": "direct",
+      "url": "https://landley.net/toybox/downloads/binaries/latest/toybox-aarch64",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "bash",
+      "provider": "bnsmb/binaries-for-Android",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "binaries/**/bash-static-stripped",
+        "binaries/**/bash-static",
+        "binaries/**/bash*static*"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "sqlite3",
+      "provider": "rojenzaman/sqlite3-magisk-module",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)sqlite.*magisk.*(multi|arm64).*\\.zip$",
+      "archive": "zip",
+      "pick_regex": "(?i)(arm64-v8a|arm64|aarch64).*/?sqlite3$|(^|/)sqlite3$",
+      "static": "required"
+    },
+    {
+      "name": "jq",
+      "provider": "jqlang/jq",
+      "kind": "github_release_asset",
+      "asset_regex": "^jq-linux-arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "yq",
+      "provider": "mikefarah/yq",
+      "kind": "github_release_asset",
+      "asset_regex": "^yq_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "coreutils",
+      "provider": "uutils/coreutils",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)aarch64-unknown-linux-musl.*\\.(tar\\.gz|tgz)$",
+      "archive": "tar",
+      "pick_regex": "(^|/)coreutils$",
+      "static": "required"
+    },
+    {
+      "name": "rg",
+      "provider": "BurntSushi/ripgrep",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)aarch64-unknown-linux-musl.*\\.tar\\.gz$",
+      "archive": "tar",
+      "pick_regex": "(^|/)rg$",
+      "static": "required"
+    },
+    {
+      "name": "fd",
+      "provider": "sharkdp/fd",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)aarch64-unknown-linux-musl.*\\.tar\\.gz$",
+      "archive": "tar",
+      "pick_regex": "(^|/)fd$",
+      "static": "required"
+    },
+    {
+      "name": "fzf",
+      "provider": "junegunn/fzf",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)android_arm64.*\\.tar\\.gz$",
+      "archive": "tar",
+      "pick_regex": "(^|/)fzf$",
+      "static": "required"
+    },
+    {
+      "name": "zoxide",
+      "provider": "ajeetdsouza/zoxide",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)(aarch64-linux-android|aarch64-unknown-linux-musl).*\\.tar\\.gz$",
+      "archive": "tar",
+      "pick_regex": "(^|/)zoxide$",
+      "static": "required"
+    },
+    {
+      "name": "xxd",
+      "provider": "whoisnian/static-binaries",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^xxd_.*_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "strings",
+      "provider": "tiiuae/aarch64_bin_builder",
+      "kind": "github_release_asset",
+      "asset_regex": "^strings$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "readelf",
+      "provider": "tiiuae/aarch64_bin_builder",
+      "kind": "github_release_asset",
+      "asset_regex": "^readelf$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "objdump",
+      "provider": "tiiuae/aarch64_bin_builder",
+      "kind": "github_release_asset",
+      "asset_regex": "^objdump$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "nm",
+      "provider": "tiiuae/aarch64_bin_builder",
+      "kind": "github_release_asset",
+      "asset_regex": "^nm$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "7zz",
+      "provider": "bnsmb/binaries-for-Android",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "binaries/**/7zz*static*"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "zstd",
+      "provider": "dawnxoxo/android-static-binaries",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "**/zstd",
+        "**/zstd_static"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "lz4",
+      "provider": "dawnxoxo/android-static-binaries",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "**/lz4",
+        "**/lz4_static"
+      ],
+      "static": "required",
+      "optional": true
+    },
+    {
+      "name": "xz",
+      "provider": "bnsmb/binaries-for-Android",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "binaries/**/xz_static",
+        "binaries/**/xz*"
+      ],
+      "static": "preferred"
+    },
+    {
+      "name": "brotli",
+      "provider": "dawnxoxo/android-static-binaries",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "**/brotli",
+        "**/brotli_static"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "pigz",
+      "provider": "whoisnian/static-binaries",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^pigz_.*_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "cpio",
+      "provider": "dawnxoxo/android-static-binaries",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "**/cpio",
+        "**/cpio_static"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "curl",
+      "provider": "whoisnian/static-binaries",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^curl_.*_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "aria2c",
+      "provider": "dawnxoxo/android-static-binaries",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "**/aria2c",
+        "**/aria2c_static"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "rsync",
+      "provider": "whoisnian/static-binaries",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^rsync_.*_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "socat",
+      "provider": "whoisnian/static-binaries",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^socat_.*_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "strace",
+      "provider": "whoisnian/static-binaries",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^strace_.*_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "ltrace",
+      "provider": "bnsmb/binaries-for-Android",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "binaries/**/ltrace_static",
+        "binaries/**/ltrace*"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "lsof",
+      "provider": "whoisnian/static-binaries",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^lsof_.*_linux_arm64$",
+      "archive": "none",
+      "static": "required"
+    },
+    {
+      "name": "zsh",
+      "provider": "dawnxoxo/android-static-binaries",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "**/zsh",
+        "**/zsh_static"
+      ],
+      "static": "required"
+    },
+    {
+      "name": "git",
+      "provider": "bnsmb/clang19_toolchain_for_android",
+      "kind": "github_repo_file_glob",
+      "glob_candidates": [
+        "sysroot/**/bin/git"
+      ],
+      "static": "preferred",
+      "allow_android_system_libs": true
+    }
   ]
 }
