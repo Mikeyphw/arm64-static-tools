@@ -1,6 +1,6 @@
 id=arm64_static_tools
 name=ARM64 Static Tools
-version=0.3.0
-versionCode=3
+version=0.4.0
+versionCode=4
 author=Mikey
-description=Offline ARM64 recovery toolkit with Zsh, static utilities and native manager updates
+description=Offline ARM64 recovery terminal with static Python, Rich, Vector backups and module management

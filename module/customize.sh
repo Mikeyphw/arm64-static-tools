@@ -22,5 +22,6 @@ set_perm_recursive "$MODPATH/system/etc/arm64-static-tools" 0 0 0755 0644
 set_perm_recursive "$MODPATH/ast" 0 0 0755 0644
 set_perm "$MODPATH/ast/entrypoint.sh" 0 0 0755
 set_perm "$MODPATH/ast/install-entrypoint.sh" 0 0 0755
+[ -f "$MODPATH/ast/runtime/python/bin/python3" ] && set_perm "$MODPATH/ast/runtime/python/bin/python3" 0 0 0755
 MODDIR="$MODPATH" sh "$MODPATH/ast/install-entrypoint.sh" || \
   abort "Cannot install trusted AST recovery entry point"

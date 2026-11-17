@@ -12,6 +12,9 @@ mkdir -p "$STAGE/system/bin" "$STAGE/system/etc/arm64-static-tools"
 # Module source is text-only; binaries are materialized directly from the external
 # cache into this temporary staging tree and disappear when packaging completes.
 cp -a module/. "$STAGE/"
+# Tests compile host bytecode; never leak host Python .pyc into ARM64 module.
+find "$STAGE/ast" -type d -name __pycache__ -prune -exec rm -rf -- {} +
+find "$STAGE/ast" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 python3 scripts/fetch.py \
   --mode locked \
   --export-dir "$STAGE/system/bin" \
@@ -20,6 +23,9 @@ python3 scripts/fetch.py \
 cp build/provenance.json manifest/sources.json manifest/lock.json \
   "$STAGE/system/etc/arm64-static-tools/"
 python3 scripts/package_plugins.py --out "$STAGE/ast"
+# Prebuilt static CPython and pure-Python Rich dependencies. No runtime
+# download in recovery and no source compilation during packaging.
+python3 scripts/package_python_runtime.py --out "$STAGE/ast/runtime/python"
 # Native manager update URL is stamped from an explicitly provided or
 # verified canonical GitHub origin. Never guess a module-release address.
 RELEASE_REPO=${AST_RELEASE_REPOSITORY:-}
@@ -39,6 +45,7 @@ else
 fi
 chmod 0755 "$STAGE/customize.sh" "$STAGE/post-fs-data.sh" "$STAGE/service.sh" "$STAGE/uninstall.sh" "$STAGE/ast/entrypoint.sh" "$STAGE/ast/install-entrypoint.sh"
 find "$STAGE/system/bin" -type f -exec chmod 0755 {} +
+chmod 0755 "$STAGE/ast/runtime/python/bin/python3"
 
 VERSION=$(awk -F= '$1=="version"{print $2}' module/module.prop)
 OUT="$DIST_DIR/arm64-static-tools-${VERSION}.zip"

@@ -187,3 +187,33 @@ and publishes `update.json`, changelog and ZIP as one stable release.
 The `updateJson` manager feed is stamped only with verified
 `AST_RELEASE_REPOSITORY=owner/repo` or a canonical GitHub `origin`. No URL
 is invented for unbound local builds.
+
+## R02 — Rich recovery dashboard and embedded static Python
+
+AST now packages a **prebuilt and SHA256-pinned ARM64 musl static CPython** plus
+pinned pure-Python Rich dependencies from `manifest/python-runtime.json`.
+Host-only packaging requires `readelf` and `zstd`; the actual ARM64 interpreter
+is not executed during a cross-platform build. A physical recovery acceptance
+run is required before claiming device compatibility.
+
+The terminal stays primary. Use `sh /data/local/tmp/ast` to enter Zsh,
+`ast menu` for a Rich/fzf in-terminal dashboard, `ast modules` for KernelSU /
+Magisk / APatch state, `ast vector` for **read-only** SQLite inspection,
+`ast backups` for five verified Vector backups, `ast python` for the bundled
+interpreter, and `ast --safe` if Python or Zinit fails. `ast py2droid` is an
+optional diagnostic-only probe; no Py2Droid scripts or environments are automatically
+sourced. Exiting menus returns to the invoking terminal.
+
+Backend rules: use `ksud module` only if its native executable is available;
+otherwise require recovery-mode confirmation for filesystem `disable` / `remove`
+markers. No implicit bootloop rescue or silent enabling/disabling. Vector
+database editing and scopes are **out of R02**, reserved for the qualified R03
+schema-specific implementation. Unknown SQLite layouts remain read-only.
+
+Vector backups default to `/data/adb/arm64-static-tools/backups`; an existing
+secured `/data/local/tmp/lspd-backups` can be selected using the
+`AST_BACKUPS` environment variable. SQLite snapshots use the backup API, not
+raw WAL-file copies. Restore requires real recovery and an explicit typed
+confirmation, and retains the original configuration as a rollback directory.
+
+See [R02 design and validation](docs/RECOVERY_R02.md).

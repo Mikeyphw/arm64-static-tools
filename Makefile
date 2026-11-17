@@ -3,7 +3,7 @@
 check:
 	python3 scripts/verify_manifest.py
 	python3 scripts/check_repo_purity.py
-	python3 -m py_compile scripts/fetch.py scripts/verify_manifest.py scripts/check_repo_purity.py
+	python3 -m py_compile scripts/fetch.py scripts/verify_manifest.py scripts/check_repo_purity.py scripts/package_python_runtime.py module/ast/manager/*.py
 	bash -n scripts/package.sh scripts/install.sh module/customize.sh module/post-fs-data.sh module/service.sh module/uninstall.sh module/ast/entrypoint.sh module/ast/install-entrypoint.sh
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
@@ -16,7 +16,8 @@ update: check
 fetch: check
 	python3 scripts/fetch.py --mode locked
 
-# Reproducible package from manifest/lock.json. Does not silently update tools.
+# Reproducible package from manifest/lock.json and python-runtime.json.
+# Requires pinned external source cache or HTTPS to download verified assets. Does not silently update tools.
 package: check
 	bash scripts/package.sh
 

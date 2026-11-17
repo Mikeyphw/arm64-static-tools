@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Prerequisites
-        run: sudo apt-get update && sudo apt-get install -y file binutils zip
+        run: sudo apt-get update && sudo apt-get install -y file binutils zip zstd
       - name: Validate source and locked binary inputs
         run: make check && make fetch
       - name: Build release (no implicit prebuilt updates)

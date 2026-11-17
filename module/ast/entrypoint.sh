@@ -31,26 +31,33 @@ AST_HOME=$AST_STATE/home
 AST_ZDOTDIR=$AST_STATE/zsh
 AST_CACHE=$AST_STATE/cache
 AST_TMP=$AST_STATE/tmp
+AST_PYTHON=$AST_ROOT/ast/runtime/python/bin/python3
 for p in "$AST_HOME" "$AST_ZDOTDIR" "$AST_CACHE" "$AST_TMP"; do
   [ ! -L "$p" ] || ast_die "Unsafe state symlink $p"
   if [ ! -d "$p" ]; then mkdir -m 700 -p "$p" || ast_die "Cannot create $p"; fi
   chmod 700 "$p" 2>/dev/null || :
 done
 # Keep the recovery shell independent of Py2Droid and systemless mounts.
-PATH="$AST_ROOT/system/bin:/sbin:/system/bin:/system/xbin:/bin:/usr/bin"
+PATH="$AST_ROOT/ast/runtime/python/bin:$AST_ROOT/system/bin:/sbin:/system/bin:/system/xbin:/bin:/usr/bin"
 HOME=$AST_HOME
 ZDOTDIR=$AST_ZDOTDIR
 XDG_CONFIG_HOME=$AST_STATE/config
 XDG_CACHE_HOME=$AST_CACHE
 XDG_DATA_HOME=$AST_STATE/share
 TMPDIR=$AST_TMP
-export AST_ROOT AST_STATE AST_HOME AST_ZDOTDIR AST_CACHE AST_MODE PATH HOME ZDOTDIR XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME TMPDIR
+PYTHONHOME="$AST_ROOT/ast/runtime/python"
+PYTHONPATH="$AST_ROOT/ast/runtime/python/site-packages"
+PYTHONNOUSERSITE=1
+PYTHONDONTWRITEBYTECODE=1
+PYTHONSAFEPATH=1
+export AST_ROOT AST_STATE AST_HOME AST_ZDOTDIR AST_CACHE AST_MODE AST_PYTHON PATH HOME ZDOTDIR XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME TMPDIR PYTHONHOME PYTHONPATH PYTHONNOUSERSITE PYTHONDONTWRITEBYTECODE PYTHONSAFEPATH
 if [ -z "${TERM:-}" ]; then TERM=vt100; export TERM; fi
 # Explicit test probe, never used in installed module.
 if [ "${AST_TEST_PRINT_ENV:-0}" = 1 ]; then printf 'AST_ROOT=%s\nAST_MODE=%s\nHOME=%s\nZDOTDIR=%s\nPATH=%s\n' "$AST_ROOT" "$AST_MODE" "$HOME" "$ZDOTDIR" "$PATH"; exit 0; fi
 
 ast_doctor() {
   printf 'AST Recovery doctor\nmode=%s\nroot=%s\nstate=%s\nterm=%s\n' "$AST_MODE" "$AST_ROOT" "$AST_STATE" "$TERM"
+  if [ -x "$AST_PYTHON" ]; then echo "OK   embedded static Python"; else echo "MISS embedded static Python (terminal still works)"; fi
   for tool in zsh busybox fzf jq lsd bat oh-my-posh; do
     if [ -x "$AST_ROOT/system/bin/$tool" ]; then printf 'OK   %s\n' "$tool"; else printf 'MISS %s\n' "$tool"; fi
   done
@@ -75,11 +82,34 @@ ast_shell() {
   exec sh
 }
 
+ast_python() {
+  [ -x "$AST_PYTHON" ] && [ -f "$AST_ROOT/ast/manager/main.py" ] || {
+    ast_err 'Embedded Python / Rich dashboard unavailable; Zsh and CLI remain functional'
+    return 127
+  }
+  [ ! -L "$AST_ROOT/ast/runtime" ] && [ ! -L "$AST_ROOT/ast/runtime/python" ] && \
+  [ ! -L "$AST_ROOT/ast/manager" ] && [ ! -L "$AST_PYTHON" ] && \
+  [ ! -L "$AST_ROOT/ast/manager/main.py" ] || {
+    ast_err 'Unsafe Python / dashboard symlink refused'; return 126;
+  }
+  "$AST_PYTHON" -s "$AST_ROOT/ast/manager/main.py" "$@"
+}
+
 if [ "$#" -eq 0 ]; then ast_shell; fi
 case "$1" in
   shell|--shell) shift; [ "$#" -eq 0 ] || ast_die 'shell takes no arguments'; ast_shell ;;
   --safe|safe) AST_SAFE=1; export AST_SAFE; shift; [ "$#" -eq 0 ] || ast_die 'safe takes no arguments'; ast_shell ;;
-  doctor|--doctor) shift; [ "$#" -eq 0 ] || ast_die 'doctor takes no arguments'; ast_doctor ;;
+  doctor|--doctor)
+    shift
+    if [ -x "$AST_PYTHON" ]; then
+      if ast_python doctor "$@"; then :
+      elif [ "$#" -eq 0 ]; then ast_doctor
+      else ast_die 'Structured diagnostics unavailable; no invalid JSON emitted'
+      fi
+    else
+      [ "$#" -eq 0 ] || ast_die 'Embedded Python unavailable for structured diagnostics'
+      ast_doctor
+    fi ;;
   theme)
     shift
     case "${1:-list}" in
@@ -117,7 +147,15 @@ case "$1" in
         printf 'AST: %sd %s (restart shell)\n' "$action" "$plug" ;;
       *) ast_die 'Usage: ast plugins [list|enable NAME|disable NAME]' ;;
     esac ;;
-  menu) shift; ast_err 'Rich dashboard is scheduled for R02; using Zsh for now'; ast_shell ;;
+  menu|modules|vector|backups) cmd=$1; shift; ast_python "$cmd" "$@" ;;
+  python) shift; [ -x "$AST_PYTHON" ] || ast_die 'Embedded Python unavailable'; exec "$AST_PYTHON" "$@" ;;
+  py2droid)
+    shift
+    [ "$#" -eq 0 ] || ast_die 'Py2Droid is diagnostic-only until external ABI/linker qualification'
+    [ -f /data/adb/py2droid/usr/bin/python3 ] && [ ! -L /data/adb/py2droid/usr/bin/python3 ] || ast_die 'Py2Droid unavailable'
+    ast_err 'Py2Droid detected, but recovery compatibility is not yet qualified'
+    ast_err 'No external interpreter or module scripts were executed'
+    ;;
   --) shift; [ "$#" -gt 0 ] || ast_die 'Missing command after --'; exec "$@" ;;
-  *) ast_die 'Usage: ast [shell|safe|doctor|theme|plugins|menu|-- command...]' ;;
+  *) ast_die 'Usage: ast [shell|safe|doctor|theme|plugins|menu|modules|vector|backups|python|py2droid|-- command...]' ;;
 esac
