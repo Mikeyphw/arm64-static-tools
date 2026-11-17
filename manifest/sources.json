@@ -286,6 +286,25 @@
       "archive": "tar",
       "pick_regex": "(^|/)micro$",
       "static": "required"
+    },
+    {
+      "name": "lsd",
+      "provider": "lsd-rs/lsd",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^lsd-.*-aarch64-unknown-linux-musl\\.tar\\.gz$",
+      "archive": "tar",
+      "pick_regex": "(^|/)lsd$",
+      "static": "required",
+      "optional": true
+    },
+    {
+      "name": "oh-my-posh",
+      "provider": "JanDeDobbeleer/oh-my-posh",
+      "kind": "github_release_asset",
+      "asset_regex": "(?i)^posh-linux-arm64$",
+      "archive": "none",
+      "static": "required",
+      "optional": true
     }
   ]
 }

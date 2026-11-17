@@ -157,3 +157,33 @@ make install     # package locked set + try local root-manager installation
 make clean       # remove repo-local generated metadata/artifacts only
 make clean-cache # remove external downloaded-binary cache
 ```
+
+## Recovery shell (R01)
+
+With `/data` mounted and decrypted, use `sh /data/local/tmp/ast` to enter the
+standalone Zsh recovery shell. `sh /data/local/tmp/ast doctor` checks available
+tools, `sh /data/local/tmp/ast safe` bypasses Zinit, and
+`sh /data/local/tmp/ast -- jq --version` runs a command in AST's environment.
+The launcher remains available if systemless PATH mounting is inactive.
+The launcher does not auto-mount, decrypt, flash or fetch updates.
+
+The offline Zinit bundle is built from pinned Git commits and trees in
+`manifest/plugins.json` into the ZIP staging directory, not vendored into Git.
+Plugin sources are downloaded only at package-build time, never in recovery.
+`ast menu` remains a terminal entry point until the Rich dashboard in R02.
+
+Optional LSD and Oh My Posh prebuilts are approved in `manifest/sources.json`
+with static ELF qualification. After `make update`, commit the new lockfile.
+Prompts default to a recovery-safe ASCII-compatible style; Nerd Fonts inside
+PitchBlack require separate renderer/font verification.
+
+## Root-manager update channel
+
+See [docs/UPDATES.md](docs/UPDATES.md). `make update` changes binary lock
+metadata, **not** the installed module. A stable module update requires
+explicit release publishing using `.github/workflows/release.yml`, which
+checks the pinned toolset, monotonic module `versionCode`, ZIP integrity,
+and publishes `update.json`, changelog and ZIP as one stable release.
+The `updateJson` manager feed is stamped only with verified
+`AST_RELEASE_REPOSITORY=owner/repo` or a canonical GitHub `origin`. No URL
+is invented for unbound local builds.

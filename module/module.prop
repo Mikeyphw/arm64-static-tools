@@ -1,6 +1,6 @@
 id=arm64_static_tools
 name=ARM64 Static Tools
-version=0.2.0
-versionCode=2
+version=0.3.0
+versionCode=3
 author=Mikey
-summary=Prebuilt-only ARM64 root toolkit for Magisk, KernelSU and APatch
+description=Offline ARM64 recovery toolkit with Zsh, static utilities and native manager updates

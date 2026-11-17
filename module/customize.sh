@@ -17,3 +17,10 @@ esac
 set_perm_recursive "$MODPATH/system/bin" 0 0 0755 0755
 set_perm_recursive "$MODPATH/system/etc/arm64-static-tools" 0 0 0755 0644
 [ -d "$MODPATH/system/share" ] && set_perm_recursive "$MODPATH/system/share" 0 0 0755 0644
+
+# Recovery entry point also works when systemless /system/bin mounts are absent.
+set_perm_recursive "$MODPATH/ast" 0 0 0755 0644
+set_perm "$MODPATH/ast/entrypoint.sh" 0 0 0755
+set_perm "$MODPATH/ast/install-entrypoint.sh" 0 0 0755
+MODDIR="$MODPATH" sh "$MODPATH/ast/install-entrypoint.sh" || \
+  abort "Cannot install trusted AST recovery entry point"

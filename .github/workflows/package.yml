@@ -10,6 +10,8 @@ on:
       - 'scripts/**'
       - 'module/**'
       - 'Makefile'
+      - 'tests/**'
+      - 'updates/**'
       - '.github/workflows/package.yml'
 
 jobs:

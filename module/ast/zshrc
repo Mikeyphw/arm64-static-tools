@@ -1,0 +1,59 @@
+# AST Zsh profile. Terminal-first; never depends on Python or Py2Droid.
+[[ -n $AST_ROOT && -r $AST_ROOT/ast/zshrc ]] || return 0
+setopt prompt_subst hist_ignore_dups share_history
+HISTFILE="$AST_STATE/history"
+HISTSIZE=500
+SAVEHIST=500
+if [[ $AST_MODE == recovery ]]; then
+  # Avoid persisting sensitive recovery commands by default.
+  unset HISTFILE
+  SAVEHIST=0
+fi
+if [[ -z ${NO_COLOR:-} && ${TERM:-} != dumb ]]; then
+  autoload -Uz colors && colors
+fi
+# Optional enhancements must never break core commands when tools are absent.
+if [[ -x "$AST_ROOT/system/bin/lsd" ]]; then
+  alias ls='lsd --icon never --group-dirs first'
+  alias ll='lsd -lah --icon never --group-dirs first'
+  alias tree='lsd --icon never --tree'
+fi
+if [[ -x "$AST_ROOT/system/bin/bat" ]]; then
+  alias cat='bat --paging=never'
+fi
+# Zinit and local plugins must be packaged and verified before enabling.
+if [[ -r "$AST_ROOT/ast/zinit/zinit.zsh" && $AST_MODE == recovery ]]; then
+  typeset -gA ZINIT
+  ZINIT[HOME_DIR]="$AST_STATE/zinit"
+  ZINIT[BIN_DIR]="$AST_ROOT/ast/zinit"
+  source "$AST_ROOT/ast/zinit/zinit.zsh"
+  # fpath must be ready before compinit, fzf-tab after compinit.
+  if [[ -d "$AST_ROOT/ast/plugins/zsh-completions/src" ]] && \
+    ! grep -Fxq zsh-completions "$AST_STATE/disabled-plugins" 2>/dev/null; then
+    fpath=("$AST_ROOT/ast/plugins/zsh-completions/src" $fpath)
+  fi
+  autoload -Uz compinit
+  compinit -d "$AST_CACHE/zcompdump" -i
+  for plugin in fzf-tab zsh-autosuggestions zsh-history-substring-search zsh-syntax-highlighting; do
+    plug="$AST_ROOT/ast/plugins/$plugin"
+    if [[ -d $plug ]] && ! grep -Fxq "$plugin" "$AST_STATE/disabled-plugins" 2>/dev/null; then
+      zinit light "$plug" || print -u2 "AST: skipped incompatible plugin $plugin"
+    fi
+  done
+  unset plug plugin
+fi
+# Prompt fallback is intentional when oh-my-posh or glyphs are unsupported.
+PROMPT='[AST:%(?.OK.ERR):%n] %~ %# '
+if [[ -x "$AST_ROOT/system/bin/oh-my-posh" && -z ${NO_COLOR:-} && ${TERM:-} != dumb ]]; then
+  ast_choice=compact
+  if [[ -r "$AST_STATE/theme" ]]; then
+    read -r ast_choice < "$AST_STATE/theme"
+  fi
+  case "$ast_choice" in modern|compact|minimal) : ;; *) ast_choice=compact ;; esac
+  ast_theme="$AST_ROOT/ast/themes/ast-${ast_choice}.omp.json"
+  if [[ -r "$ast_theme" ]]; then
+    eval "$("$AST_ROOT/system/bin/oh-my-posh" init zsh --config "$ast_theme" 2>/dev/null)" || true
+  fi
+  unset ast_theme ast_choice
+fi
+function ast() { command sh /data/local/tmp/ast "$@"; }
