@@ -246,3 +246,20 @@ compact ASCII-safe prompt. See [R04 guide](docs/RECOVERY_R04.md).
 The Toybox lock now uses the immutable 0.8.14 release directory with the
 previously approved exact executable digest instead of the mutable `/latest/`
 URL. CI continues to refuse any checksum drift.
+
+## Exact-lock CI and duplicate event prevention
+
+CI packages the **committed** lock, without running `make update` in a PR.
+The package workflow runs on pull requests for feature branches, and on `push`
+only after changes reach the default `master` branch; feature-branch pushes do
+not start a second copy of the same workflow. Superseded runs for the same PR
+are cancelled; a cancelled run is not a pass. The weekly report job remains
+separate from release qualification.
+
+`7zz` is intentionally source-bound to the verified GitHub commit
+`5ea67098a9bf2e32d6a85ef9775a19bf147b6285`, not upstream `main`.
+The reviewed executable digest is `265e45b5847392c0cd97a84acb6b3f9933c3e43d698fb5a2979f5e9a80c05758`,
+size 3,105,552 bytes, matching the observed CI download and upstream Git blob.
+`make fetch` must still verify that exact SHA and the ARM64 static ELF properties.
+`make update` is a distinct, explicit metadata-discovery operation; future
+source changes require another reviewed source lock commit.

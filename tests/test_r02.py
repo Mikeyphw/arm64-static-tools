@@ -218,7 +218,29 @@ class CLITests(R02Temp):
         self.assertFalse(d['color']);self.assertFalse(d['vector_writes_enabled'])
     def test_menu_requires_terminal(self):
         p=ROOT/'module/ast/manager/main.py'
-        r=subprocess.run([sys.executable,str(p),'--config',str(self.config),'menu'],capture_output=True,text=True)
+        r=subprocess.run([sys.executable,str(p),'--config',str(self.config),'menu'],
+                         stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=10)
+        self.assertEqual(r.returncode,2);self.assertIn('TTY unavailable',r.stderr)
+    def test_menu_refuses_real_stdin_tty_with_redirected_stdout(self):
+        # Regression for native Devtool run in interactive Termux: capture_output
+        # creates a stdout PIPE but otherwise inherits the foreground TTY.
+        master,slave=os.openpty()
+        try:
+            p=ROOT/'module/ast/manager/main.py'
+            r=subprocess.run([sys.executable,str(p),'--config',str(self.config),'menu'],
+                             stdin=slave,capture_output=True,text=True,timeout=10)
+        finally:
+            os.close(slave);os.close(master)
+        self.assertEqual(r.returncode,2);self.assertIn('TTY unavailable',r.stderr)
+    def test_module_picker_refuses_redirected_stdout_with_stdin_tty(self):
+        master,slave=os.openpty()
+        try:
+            p=ROOT/'module/ast/manager/main.py'
+            r=subprocess.run([sys.executable,str(p),'--config',str(self.config),
+                              '--modules',str(self.modules),'modules','disable'],
+                             stdin=slave,capture_output=True,text=True,timeout=10)
+        finally:
+            os.close(slave);os.close(master)
         self.assertEqual(r.returncode,2);self.assertIn('TTY unavailable',r.stderr)
     def test_posix_recovery_shell(self):
         subprocess.run(['sh','-n',str(ROOT/'module/ast/entrypoint.sh')],check=True)

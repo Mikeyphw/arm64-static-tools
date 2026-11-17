@@ -55,5 +55,20 @@ if lock_path.exists():
             assert key in entry, f"{entry['name']}: lock missing {key}"
         assert len(entry["source_sha256"]) == 64 and len(entry["sha256"]) == 64
 
+# 7zz must be tied to an immutable Git revision; source hashes and executable
+# bytes are qualified in `make fetch`. Future updates can be reviewed without
+# editing historical hard-coded version gates.
+if lock_path.exists():
+    import re
+    sevenzip = next((x for x in lock["tools"] if x["name"] == "7zz"), None)
+    assert sevenzip is not None, "7zz must be pinned in the committed lock"
+    pattern = (r"https://raw\.githubusercontent\.com/ollm/7zip-bin-full/"
+               r"([0-9a-f]{40})/linux/arm64/7zzs")
+    match = re.fullmatch(pattern, sevenzip["source_url"])
+    assert match is not None, "7zz lock must reference an immutable upstream Git commit"
+    assert sevenzip["version"] == match.group(1), "7zz lock revision differs from source URL"
+    assert sevenzip["source_sha256"] == sevenzip["sha256"], "7zz source/binary hash mismatch"
+    assert sevenzip["size"] > 0 and sevenzip["static"] is True, "7zz lock must be a static executable"
+
 print(f"manifest OK: {len(names)} tools; ARM64-only; prebuilt-only; rclone absent")
 print(f"metadata lock: {'present' if lock_path.exists() else 'not created yet (run make update)'}")

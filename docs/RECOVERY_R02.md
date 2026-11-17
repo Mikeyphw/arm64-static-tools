@@ -57,6 +57,10 @@ network calls or root module mutations at startup.
 ## Terminal fallback / diagnostics
 
 - UI uses Rich panels/tables and optional fzf; numbered menus remain available.
+- Interactive prompts require **both** stdin and stdout to be terminals. Piped or
+  redirected stdout must never borrow Termux stdin and block headless validation.
+- The CLI regression suite explicitly closes stdin and tests PTY stdin with
+  piped stdout; each subprocess has a bounded timeout.
 - `NO_COLOR`, `CLICOLOR=0`, `TERM=dumb` and redirected streams produce plain output.
 - `ast doctor` reports Python, root-manager and Vector status without private
   file contents; JSON diagnostics can be written to a fresh 0600 file.

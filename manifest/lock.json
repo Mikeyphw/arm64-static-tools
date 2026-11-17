@@ -219,13 +219,13 @@
       "name": "7zz",
       "needed": [],
       "provider": "ollm/7zip-bin-full",
-      "sha256": "277907bc627633ec344757fe47699856cbb6e37f75cbc310d37d62cfacdd73b2",
-      "size": 3117840,
+      "sha256": "265e45b5847392c0cd97a84acb6b3f9933c3e43d698fb5a2979f5e9a80c05758",
+      "size": 3105552,
       "source_asset": "7zzs",
-      "source_sha256": "277907bc627633ec344757fe47699856cbb6e37f75cbc310d37d62cfacdd73b2",
-      "source_url": "https://raw.githubusercontent.com/ollm/7zip-bin-full/main/linux/arm64/7zzs",
+      "source_sha256": "265e45b5847392c0cd97a84acb6b3f9933c3e43d698fb5a2979f5e9a80c05758",
+      "source_url": "https://raw.githubusercontent.com/ollm/7zip-bin-full/5ea67098a9bf2e32d6a85ef9775a19bf147b6285/linux/arm64/7zzs",
       "static": true,
-      "version": "149ba663159ac4bf3300a32633928d01759c99e3"
+      "version": "5ea67098a9bf2e32d6a85ef9775a19bf147b6285"
     },
     {
       "file": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, BuildID[sha1]=17f195501e3c396084ac8d7bfa064e00a5de73af, stripped",

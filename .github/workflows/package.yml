@@ -6,6 +6,8 @@ on:
     - cron: '17 6 * * 1'
   pull_request:
   push:
+    branches:
+      - master
     paths:
       - 'manifest/**'
       - 'scripts/**'
@@ -15,6 +17,13 @@ on:
       - 'updates/**'
       - 'docs/**'
       - '.github/workflows/package.yml'
+
+# Feature-branch pushes are already qualified by pull_request. Avoid running
+# the same full packaging job twice for a single PR HEAD; keep default-branch
+# checks after merging and manual/scheduled qualification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   package:

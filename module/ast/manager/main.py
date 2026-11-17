@@ -29,8 +29,12 @@ except ImportError:
     Console=Table=Panel=Confirm=None
     RICH=False
 
+def interactive_tty() -> bool:
+    # Both sides must be a terminal: captured output is not an interactive menu.
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
 NO_COLOR=('NO_COLOR' in os.environ or os.getenv('CLICOLOR')=='0' or os.getenv('TERM')=='dumb')
-ANSI_OK=sys.stdin.isatty() and sys.stdout.isatty() and not NO_COLOR
+ANSI_OK=interactive_tty() and not NO_COLOR
 CONSOLE=Console(force_terminal=ANSI_OK, no_color=NO_COLOR, highlight=False) if RICH else None
 
 def emit(s=''):
@@ -52,13 +56,13 @@ def table(rows:list[dict],columns:list[str]):
         for row in rows:print(' | '.join(str(row.get(k,''))[:100] for k in columns))
 
 def yes(prompt:str, *, expect:str='YES') -> bool:
-    if not sys.stdin.isatty():return False
+    if not interactive_tty():return False
     emit(f'{prompt}\nType {expect} to confirm; anything else cancels.')
     try: return input('> ').strip()==expect
     except (EOFError,KeyboardInterrupt):return False
 
 def options(title:str, values:list[tuple[str,str]]) -> str|None:
-    if not sys.stdin.isatty():raise Refused('Interactive TTY unavailable; use read-only commands')
+    if not interactive_tty():raise Refused('Interactive TTY unavailable; use read-only commands')
     # Arrow keys, search and Esc are delegated to the already pinned static
     # fzf binary; if it cannot use the recovery TTY, keep numbered prompts.
     fzf=Path(os.getenv('AST_ROOT','/data/adb/modules/arm64_static_tools'))/'system/bin/fzf'
@@ -83,6 +87,7 @@ def options(title:str, values:list[tuple[str,str]]) -> str|None:
     return values[int(choice)-1][0]
 
 def choose_modules(modules:list[root_modules.RootModule], *, multi:bool=True) -> list[str]:
+    if not interactive_tty():raise Refused('Interactive TTY unavailable; use read-only commands')
     if not modules:return []
     fzf=Path(os.environ.get('AST_ROOT','/data/adb/modules/arm64_static_tools'))/'system/bin/fzf'
     if ANSI_OK and fzf.is_file() and os.access(fzf,os.X_OK):
