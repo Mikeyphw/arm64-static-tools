@@ -38,6 +38,18 @@ if lock_path.exists():
     assert len(locked_names) == len(set(locked_names)), "duplicate locked tool names"
     unknown = set(locked_names) - set(names)
     assert not unknown, f"lock contains tools absent from manifest: {sorted(unknown)}"
+    # Version-bound, immutable provider URI for this Toybox binary. A digest on
+    # /latest/ still rejects drift, but makes CI fail after an upstream release.
+    toybox = next(x for x in lock['tools'] if x['name'] == 'toybox')
+    toybox_source = next(x for x in d['tools'] if x['name'] == 'toybox')
+    assert toybox_source['url'] == toybox['source_url'], 'Toybox source/lock URL disagree'
+    assert toybox['source_url'] == 'https://landley.net/toybox/downloads/binaries/0.8.14/toybox-aarch64', 'Toybox must use versioned upstream release'
+    assert toybox['version'] == '0.8.14'
+    assert toybox['sha256'] == toybox['source_sha256'] == '223b5ff5929371225d0bc62fb3b99a148692295fb6f85ad86bb924f689a55ea4'
+    assert toybox['size'] == 838240
+    for src in d['tools']:
+        if src['kind'] == 'direct':
+            assert '/latest/' not in src['url'], f"{src['name']}: mutable latest direct source"
     for entry in lock.get("tools", []):
         for key in ("source_url", "source_sha256", "sha256", "size", "file", "static"):
             assert key in entry, f"{entry['name']}: lock missing {key}"

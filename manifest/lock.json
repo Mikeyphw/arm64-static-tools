@@ -27,9 +27,9 @@
       "size": 838240,
       "source_asset": "toybox-aarch64",
       "source_sha256": "223b5ff5929371225d0bc62fb3b99a148692295fb6f85ad86bb924f689a55ea4",
-      "source_url": "https://landley.net/toybox/downloads/binaries/latest/toybox-aarch64",
+      "source_url": "https://landley.net/toybox/downloads/binaries/0.8.14/toybox-aarch64",
       "static": true,
-      "version": "sha256:223b5ff59293"
+      "version": "0.8.14"
     },
     {
       "file": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, for Android 31, built by NDK r27b (12297006), stripped",

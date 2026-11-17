@@ -1,6 +1,6 @@
 id=arm64_static_tools
 name=ARM64 Static Tools
-version=0.5.0
-versionCode=5
+version=0.6.0
+versionCode=6
 author=Mikey
-description=Offline ARM64 recovery terminal with static Python, Rich, Vector v5 offline edits and verified recovery packaging
+description=Offline ARM64 recovery terminal, Vector v5 rescue and optional PitchBlack Nerd Font theme qualification

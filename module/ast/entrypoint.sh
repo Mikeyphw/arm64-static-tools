@@ -123,6 +123,47 @@ case "$1" in
         printf 'AST theme selected: %s (restart Zsh to apply)\n' "$2" ;;
       *) ast_die 'Usage: ast theme [list|show|set modern|compact|minimal]' ;;
     esac ;;
+  font)
+    shift
+    case "${1:-doctor}" in
+      doctor|status)
+        printf 'AST PitchBlack terminal font: recovery theme-controlled, not shell-controlled\n'
+        printf 'Mode: %s | TERM: %s\n' "$AST_MODE" "$TERM"
+        if [ -L "$AST_STATE/nerd-font-verified" ]; then
+          ast_err 'Unsafe font approval marker symlink; approval ignored'
+        elif [ -f "$AST_STATE/nerd-font-verified" ]; then
+          printf 'Font: manually confirmed in recovery (not automatically tested)\n'
+        else
+          printf 'Font: unverified; ASCII/compact prompt is safe\n'
+        fi
+        printf 'Use: ast font sample | ast font confirm | ast font reset\n' ;;
+      sample)
+        [ -t 1 ] || ast_die 'Font sample requires a real terminal'
+        [ "${TERM:-dumb}" != dumb ] || ast_die 'TERM=dumb cannot qualify glyph rendering'
+        printf 'ASCII baseline : [AST:ROOT] | /data/adb | 12345\n'
+        printf 'Nerd glyphs    : [\356\202\260] [\357\200\223] | /data/adb | 12345\n'
+        printf 'Check: visible symbols, equal cell width, wrapping and cursor placement.\n'
+        printf 'This sample cannot prove the renderer uses the selected TTF.\n' ;;
+      confirm)
+        [ "$AST_MODE" = recovery ] || ast_die 'Font confirmation is recovery-only'
+        [ -t 0 ] && [ -t 1 ] || ast_die 'Font confirmation needs a real terminal'
+        [ "${TERM:-dumb}" != dumb ] || ast_die 'TERM=dumb cannot confirm font rendering'
+        [ ! -L "$AST_STATE/nerd-font-verified" ] || ast_die 'Unsafe font marker symlink'
+        [ ! -e "$AST_STATE/nerd-font-verified" ] || ast_die 'Font already confirmed; use ast font reset first'
+        printf 'Only after installing a compatible PitchBlack theme and visually verifying ast font sample.\n'
+        printf 'Type NERD_FONT_RENDERED_OK to enable modern prompt: '
+        IFS= read -r answer || ast_die 'Confirmation interrupted'
+        [ "$answer" = NERD_FONT_RENDERED_OK ] || ast_die 'Font remains unverified'
+        ( umask 077; printf '%s\n' 'confirmed-visually' > "$AST_STATE/nerd-font-verified.new.$$" ) || ast_die 'Unable to write font marker'
+        mv -f "$AST_STATE/nerd-font-verified.new.$$" "$AST_STATE/nerd-font-verified" || ast_die 'Unable to save marker'
+        printf 'Manual font confirmation stored; restart Zsh to apply selected modern theme.\n' ;;
+      reset)
+        [ ! -L "$AST_STATE/nerd-font-verified" ] || ast_die 'Unsafe marker symlink'
+        [ ! -d "$AST_STATE/nerd-font-verified" ] || ast_die 'Font marker is a directory'
+        rm -f "$AST_STATE/nerd-font-verified" || ast_die 'Unable to reset font approval'
+        printf 'Font confirmation cleared; next Zsh uses compact prompt.\n' ;;
+      *) ast_die 'Usage: ast font [doctor|sample|confirm|reset]' ;;
+    esac ;;
   plugins)
     shift
     case "${1:-list}" in
@@ -157,5 +198,5 @@ case "$1" in
     ast_err 'No external interpreter or module scripts were executed'
     ;;
   --) shift; [ "$#" -gt 0 ] || ast_die 'Missing command after --'; exec "$@" ;;
-  *) ast_die 'Usage: ast [shell|safe|doctor|theme|plugins|menu|modules|vector|backups|python|py2droid|-- command...]' ;;
+  *) ast_die 'Usage: ast [shell|safe|doctor|theme|font|plugins|menu|modules|vector|backups|python|py2droid|-- command...]' ;;
 esac

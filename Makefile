@@ -3,7 +3,7 @@
 check:
 	python3 scripts/verify_manifest.py
 	python3 scripts/check_repo_purity.py
-	python3 -m py_compile scripts/fetch.py scripts/verify_manifest.py scripts/check_repo_purity.py scripts/package_python_runtime.py scripts/verify_module_zip.py module/ast/manager/*.py
+	python3 -m py_compile scripts/fetch.py scripts/verify_manifest.py scripts/check_repo_purity.py scripts/package_python_runtime.py scripts/verify_module_zip.py scripts/build_pbrp_nerd_theme.py module/ast/manager/*.py
 	bash -n scripts/package.sh scripts/install.sh module/customize.sh module/post-fs-data.sh module/service.sh module/uninstall.sh module/ast/entrypoint.sh module/ast/install-entrypoint.sh
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 

@@ -232,3 +232,17 @@ physical recovery qualification gates.
 The module's ZIP is verified by `scripts/verify_module_zip.py` at packaging
 time. The static Python distribution is still sourced only from exact SHA-256
 pinned upstream archives. No third-party native interpreter is required.
+
+## R04 — Opt-in PitchBlack Nerd Mono theme
+
+AST can build a **separate** GUI-terminal font theme from a user-supplied PBRP
+base theme ZIP and a licensed Nerd Font Mono TTF; it does **not** install
+fonts, modify the recovery image or download a font. The dedicated host
+command is `python3 scripts/build_pbrp_nerd_theme.py --help`.
+The recovery command `ast font doctor|sample|confirm|reset` can guide manual
+qualification of Powerline glyphs; unverified recovery terminals retain the
+compact ASCII-safe prompt. See [R04 guide](docs/RECOVERY_R04.md).
+
+The Toybox lock now uses the immutable 0.8.14 release directory with the
+previously approved exact executable digest instead of the mutable `/latest/`
+URL. CI continues to refuse any checksum drift.

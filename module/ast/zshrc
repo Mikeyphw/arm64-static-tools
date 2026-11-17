@@ -50,6 +50,13 @@ if [[ -x "$AST_ROOT/system/bin/oh-my-posh" && -z ${NO_COLOR:-} && ${TERM:-} != d
     read -r ast_choice < "$AST_STATE/theme"
   fi
   case "$ast_choice" in modern|compact|minimal) : ;; *) ast_choice=compact ;; esac
+  # The GUI terminal renders its own fonts. Only an explicit recovery-side
+  # visual confirmation can authorize the Powerline (private-use) glyphs.
+  if [[ $ast_choice == modern && $AST_MODE == recovery ]]; then
+    if [[ ! -f "$AST_STATE/nerd-font-verified" || -L "$AST_STATE/nerd-font-verified" ]]; then
+      ast_choice=compact
+    fi
+  fi
   ast_theme="$AST_ROOT/ast/themes/ast-${ast_choice}.omp.json"
   if [[ -r "$ast_theme" ]]; then
     eval "$("$AST_ROOT/system/bin/oh-my-posh" init zsh --config "$ast_theme" 2>/dev/null)" || true

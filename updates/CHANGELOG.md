@@ -1,3 +1,11 @@
+# ARM64 Static Tools v0.6.0 — AST Recovery R04 + exact-lock CI repair
+
+- Pin Toybox to its immutable upstream 0.8.14 binary URL, preserving the previously approved SHA-256, size, ELF identity and runtime validation. No silent repinning.
+- Add explicit, offline PitchBlack theme builder for an operator-supplied, SHA-256-approved Nerd Font Mono TTF; only the GUI terminal `cons` font is changed in a reviewed complete theme ZIP. No auto-install, recovery partition writes or bundled third-party font.
+- Add `ast font doctor|sample|confirm|reset` and require real recovery visual confirmation before enabling `ast-modern` Powerline glyphs; ASCII fallback remains automatic.
+- Add negative and regression coverage for source lock stability, font cmap checks, theme archive attacks, no overwrite, and recovery-only manual approval.
+- The PBRP device's GUI font, cursor alignment, glyph widths and theme rollback still require physical recovery testing. Hosted package CI and native overlay evidence are separate.
+
 # ARM64 Static Tools v0.5.0 — AST Recovery R03
 
 - Vector v5-only offline enable/disable and application scope add/remove/replace for selected Android users, with explicit typed confirmation and a verified pre-write SQLite backup.

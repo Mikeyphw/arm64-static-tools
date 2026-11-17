@@ -23,7 +23,7 @@
       "name": "toybox",
       "provider": "landley/toybox",
       "kind": "direct",
-      "url": "https://landley.net/toybox/downloads/binaries/latest/toybox-aarch64",
+      "url": "https://landley.net/toybox/downloads/binaries/0.8.14/toybox-aarch64",
       "archive": "none",
       "static": "required"
     },
