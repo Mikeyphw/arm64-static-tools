@@ -17,6 +17,7 @@ on:
       - 'updates/**'
       - 'docs/**'
       - '.github/workflows/package.yml'
+      - 'config/**'
 
 # Feature-branch pushes are already qualified by pull_request. Avoid running
 # the same full packaging job twice for a single PR HEAD; keep default-branch
@@ -37,16 +38,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Host prerequisites
         run: sudo apt-get update && sudo apt-get install -y file binutils zip zstd
-      - name: Verify committed source
-        run: make check
-      - name: Fetch and qualify exact committed ARM64 lock
+      # One Make DAG means the phony check target executes exactly once.
+      # package.sh still re-attests every locked ARM64 ELF via --mode locked.
+      - name: Check source, verify locked ARM64 binaries and package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make fetch
-      - name: Package exact committed ARM64 lock and static Python
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make package
+        run: make check package
       - uses: actions/upload-artifact@v4
         with:
           name: arm64-static-tools-module

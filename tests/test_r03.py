@@ -388,9 +388,13 @@ class HostedPackageContractTests(unittest.TestCase):
     def test_exact_lock_package_job(self):
         text=(ROOT/'.github/workflows/package.yml').read_text()
         block=text.split('  package:',1)[1].split('  update-report:',1)[0]
-        self.assertIn('make fetch',block)
-        self.assertIn('make package',block)
-        self.assertNotIn('make update',block)
+        self.assertIn('run: make check package',block)
+        self.assertNotIn('run: make fetch',block)
+        self.assertNotIn('run: make update',block)
+        sh=(ROOT/'scripts/package.sh').read_text()
+        self.assertIn('python3 scripts/fetch.py',sh)
+        self.assertIn('--mode locked',sh)
+        self.assertIn('--export-dir',sh)
         self.assertIn('github.event.pull_request.head.sha || github.sha',block)
 
     def test_update_discovery_is_separate_read_only_job(self):

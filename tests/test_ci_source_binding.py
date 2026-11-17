@@ -86,8 +86,14 @@ class ImmutableRepositoryResolverTests(unittest.TestCase):
         wf=(ROOT/'.github/workflows/package.yml').read_text()
         self.assertIn('fetch: check',mk)
         self.assertIn('python3 scripts/fetch.py --mode locked',mk)
-        self.assertIn('run: make fetch',wf)
-        self.assertNotIn('run: make update\n      - name: Package',wf)
+        self.assertIn('run: make check package',wf)
+        self.assertNotIn('run: make fetch',wf)
+        package=wf.split('  package:',1)[1].split('  update-report:',1)[0]
+        self.assertNotIn('run: make update',package)
+        sh=(ROOT/'scripts/package.sh').read_text()
+        self.assertIn('python3 scripts/fetch.py',sh)
+        self.assertIn('--mode locked',sh)
+        self.assertIn('--export-dir',sh)
 
 
 class SingleEventWorkflowTests(unittest.TestCase):
