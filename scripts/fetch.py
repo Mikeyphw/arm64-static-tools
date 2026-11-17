@@ -29,9 +29,37 @@ ROOT = Path(__file__).resolve().parent.parent
 UA = "arm64-static-tools-module/0.2"
 
 
+_GITHUB_TOKEN_CACHE = None
+
+
+def github_token():
+    global _GITHUB_TOKEN_CACHE
+    if _GITHUB_TOKEN_CACHE is not None:
+        return _GITHUB_TOKEN_CACHE or None
+
+    tok = os.getenv("GITHUB_TOKEN", "").strip()
+
+    if not tok and shutil.which("gh"):
+        try:
+            p = subprocess.run(
+                ["gh", "auth", "token"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if p.returncode == 0:
+                tok = p.stdout.strip()
+        except Exception:
+            pass
+
+    _GITHUB_TOKEN_CACHE = tok
+    return tok or None
+
+
 def req_json(url: str):
     r = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
-    tok = os.getenv("GITHUB_TOKEN")
+    tok = github_token()
     if tok:
         r.add_header("Authorization", f"Bearer {tok}")
     with urllib.request.urlopen(r) as f:
@@ -41,7 +69,7 @@ def req_json(url: str):
 def stream_download(url: str, dst: Path):
     dst.parent.mkdir(parents=True, exist_ok=True)
     r = urllib.request.Request(url, headers={"User-Agent": UA})
-    tok = os.getenv("GITHUB_TOKEN")
+    tok = github_token()
     if tok and ("github.com" in url or "githubusercontent.com" in url):
         r.add_header("Authorization", f"Bearer {tok}")
     with urllib.request.urlopen(r) as src, dst.open("wb") as out:
@@ -57,14 +85,51 @@ def sha256(path: Path) -> str:
 
 
 def latest_asset(repo: str, regex: str):
-    rel = req_json(f"https://api.github.com/repos/{repo}/releases/latest")
     pat = re.compile(regex)
-    matches = [a for a in rel.get("assets", []) if pat.search(a["name"])]
-    if not matches:
-        raise RuntimeError(f"{repo}: no latest-release asset matches {regex!r}")
-    a = matches[0]
-    return rel.get("tag_name") or rel.get("name") or "release", a["browser_download_url"], a["name"]
+    releases = []
+    errors = []
 
+    try:
+        releases.append(
+            req_json(f"https://api.github.com/repos/{repo}/releases/latest")
+        )
+    except Exception as e:
+        errors.append(str(e))
+
+    try:
+        recent = req_json(
+            f"https://api.github.com/repos/{repo}/releases?per_page=20"
+        )
+        releases.extend(recent)
+    except Exception as e:
+        errors.append(str(e))
+
+    seen = set()
+
+    for rel in releases:
+        rid = rel.get("id") or rel.get("tag_name")
+        if rid in seen:
+            continue
+        seen.add(rid)
+
+        matches = [
+            a for a in rel.get("assets", [])
+            if pat.search(a.get("name", ""))
+        ]
+        if matches:
+            a = matches[0]
+            version = (
+                rel.get("tag_name")
+                or rel.get("name")
+                or str(rid)
+                or "release"
+            )
+            return version, a["browser_download_url"], a["name"]
+
+    extra = f"; API errors={errors}" if errors else ""
+    raise RuntimeError(
+        f"{repo}: no recent release asset matches {regex!r}{extra}"
+    )
 
 def repo_file(repo: str, paths: list[str]):
     for p in paths:
@@ -77,23 +142,119 @@ def repo_file(repo: str, paths: list[str]):
     raise RuntimeError(f"{repo}: none of candidate paths exist: {paths}")
 
 
-def repo_glob(repo: str, globs: list[str]):
+_REPO_TREE_CACHE = {}
+
+
+def repo_tree(repo: str):
+    cached = _REPO_TREE_CACHE.get(repo)
+    if cached is not None:
+        return cached
+
     meta = req_json(f"https://api.github.com/repos/{repo}")
     branch = meta.get("default_branch", "main")
-    ref = req_json(f"https://api.github.com/repos/{repo}/git/refs/heads/{branch}")
+
+    ref = req_json(
+        f"https://api.github.com/repos/{repo}/git/refs/heads/{branch}"
+    )
     commit = ref["object"]["sha"]
-    tree = req_json(f"https://api.github.com/repos/{repo}/git/trees/{commit}?recursive=1")
+
+    tree = req_json(
+        f"https://api.github.com/repos/{repo}/git/trees/{commit}?recursive=1"
+    )
     if tree.get("truncated"):
         raise RuntimeError(f"{repo}: recursive tree truncated")
-    files = [x for x in tree.get("tree", []) if x.get("type") == "blob"]
-    for g in globs:
-        for item in files:
-            path = item["path"]
-            if fnmatch.fnmatch(path, g) or fnmatch.fnmatch(Path(path).name, g):
-                url = f"https://raw.githubusercontent.com/{repo}/{commit}/{path}"
-                return commit, url, Path(path).name
-    raise RuntimeError(f"{repo}: no file matches {globs}")
 
+    files = [
+        x["path"]
+        for x in tree.get("tree", [])
+        if x.get("type") == "blob"
+    ]
+
+    value = (commit, files)
+    _REPO_TREE_CACHE[repo] = value
+    return value
+
+
+def repo_glob(repo: str, globs: list[str], tool_name: str | None = None):
+    commit, files = repo_tree(repo)
+
+    candidates = []
+
+    bad_suffixes = {
+        ".md", ".txt", ".sh", ".patch", ".diff",
+        ".json", ".yaml", ".yml",
+        ".c", ".cc", ".cpp", ".h", ".hpp",
+        ".a", ".so",
+        ".zip", ".gz", ".xz", ".bz2", ".tgz",
+    }
+
+    for glob_index, g in enumerate(globs):
+        for path in files:
+            # Explicitly refuse dynamic subdirectories for this project.
+            if "/dynamic/" in f"/{path}/":
+                continue
+
+            base = Path(path).name
+
+            if not (
+                fnmatch.fnmatch(path, g)
+                or fnmatch.fnmatch(base, g)
+            ):
+                continue
+
+            score = glob_index * 10000
+
+            # ARM64_PATH_PREFERENCE
+            # Repositories such as dawnxoxo carry several architectures.
+            # Prefer ARM64/AArch64 before basename/depth ranking.
+            low_path = path.lower()
+
+            if re.search(r"(^|[/_.-])(arm64|aarch64)(?=$|[/_.-])", low_path):
+                score -= 100000
+            elif re.search(
+                r"(^|[/_.-])(armeabi-v7a|armv7|arm32|arm)(?=$|[/_.-])",
+                low_path,
+            ):
+                score += 100000
+            elif re.search(
+                r"(^|[/_.-])(x86_64|amd64|x64|x86|i686)(?=$|[/_.-])",
+                low_path,
+            ):
+                score += 100000
+
+
+            if tool_name:
+                if base == tool_name:
+                    score += 0
+                elif base == f"{tool_name}_static":
+                    score += 5
+                elif base == f"{tool_name}-static":
+                    score += 5
+                elif base.startswith(tool_name):
+                    score += 50
+                elif tool_name in base:
+                    score += 100
+                else:
+                    score += 1000
+
+            if Path(base).suffix.lower() in bad_suffixes:
+                score += 5000
+
+            # Prefer shallower paths and shorter filenames once semantic
+            # ranking is equal.
+            score += path.count("/") * 10
+            score += len(base)
+
+            candidates.append((score, path))
+
+    if not candidates:
+        raise RuntimeError(f"{repo}: no file matches {globs}")
+
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    _, path = candidates[0]
+
+    url = f"https://raw.githubusercontent.com/{repo}/{commit}/{path}"
+    return commit, url, Path(path).name
 
 def resolve_source(tool: dict):
     kind = tool["kind"]
@@ -104,7 +265,7 @@ def resolve_source(tool: dict):
     if kind == "github_repo_file":
         return repo_file(tool["provider"], tool["path_candidates"])
     if kind == "github_repo_file_glob":
-        return repo_glob(tool["provider"], tool["glob_candidates"])
+        return repo_glob(tool["provider"], tool["glob_candidates"], tool["name"])
     raise RuntimeError(f"unknown source kind {kind}")
 
 
@@ -295,6 +456,18 @@ def update_mode(cfg: dict, tools: list[dict], cache: Path, lock_path: Path, repo
     changes = []
     for t in tools:
         name = t["name"]
+
+        if t.get("kind") == "alias":
+            target = t["target"]
+            print(f"==> alias {name} -> {target}")
+            new_by_name.pop(name, None)
+            changes.append({
+                "name": name,
+                "status": "UNCHANGED",
+                "new_version": f"alias:{target}",
+            })
+            continue
+
         print(f"==> resolve {name} ({t['provider']})")
         try:
             version, url, asset = resolve_source(t)
@@ -319,13 +492,29 @@ def update_mode(cfg: dict, tools: list[dict], cache: Path, lock_path: Path, repo
                 shutil.copy2(cached, export_dir / name)
         except Exception as e:
             old = old_by_name.get(name)
-            if t.get("optional"):
-                changes.append({"name": name, "status": "FAILED", "error": str(e), "kept_previous": bool(old)})
-                if old is None:
-                    new_by_name.pop(name, None)
-                print(f"WARN optional {name}: {e}", file=sys.stderr)
-                continue
-            raise RuntimeError(f"{name}: {e}") from e
+
+            # Update mode is best-effort: one stale/broken provider must not
+            # prevent discovering and locking all other tools.
+            changes.append({
+                "name": name,
+                "status": "FAILED",
+                "error": str(e),
+                "kept_previous": bool(old),
+            })
+
+            # Preserve the previous known-good lock entry when available.
+            # On the first update there is nothing to preserve, so omit the
+            # failed tool from the newly generated lock.
+            if old is None:
+                new_by_name.pop(name, None)
+
+            requirement = "optional" if t.get("optional") else "required"
+            kept = "keeping previous lock" if old else "no previous lock"
+            print(
+                f"WARN {name} ({requirement}): {e} [{kept}]",
+                file=sys.stderr,
+            )
+            continue
 
     ordered = []
     cfg_order = [t["name"] for t in cfg["tools"]]
@@ -338,8 +527,22 @@ def update_mode(cfg: dict, tools: list[dict], cache: Path, lock_path: Path, repo
     report_path.write_text(render_report(changes) + "\n")
     json_report = report_path.with_suffix(".json")
     write_json(json_report, {"changes": changes})
+
+    failed = [c for c in changes if c["status"] == "FAILED"]
+    succeeded = [c for c in changes if c["status"] != "FAILED"]
+
     print(f"Updated metadata lock: {lock_path}")
     print(f"Update report: {report_path}")
+    print(
+        f"Update summary: {len(succeeded)} succeeded; "
+        f"{len(failed)} failed"
+    )
+
+    if failed:
+        print(
+            "Failed tools: " + ", ".join(c["name"] for c in failed),
+            file=sys.stderr,
+        )
 
 
 def locked_mode(cfg: dict, tools: list[dict], cache: Path, lock_path: Path, provenance_path: Path,
@@ -351,6 +554,10 @@ def locked_mode(cfg: dict, tools: list[dict], cache: Path, lock_path: Path, prov
     provenance = []
     for t in tools:
         name = t["name"]
+        if t.get("kind") == "alias":
+            print(f"==> locked alias {name} -> {t['target']}")
+            continue
+
         entry = locked.get(name)
         if entry is None:
             if t.get("optional"):

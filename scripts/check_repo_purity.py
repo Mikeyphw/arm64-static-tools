@@ -21,7 +21,11 @@ MAGICS = {
 
 
 def tracked_files():
-    p = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], stdout=subprocess.PIPE, check=True)
+    p = subprocess.run(
+        ["git", "-c", f"safe.directory={ROOT}", "-C", str(ROOT), "ls-files", "-z"],
+        stdout=subprocess.PIPE,
+        check=True,
+    )
     return [x.decode() for x in p.stdout.split(b"\0") if x]
 
 

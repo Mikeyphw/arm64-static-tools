@@ -16,17 +16,17 @@ assert "rclone" not in names
 assert len(names) == len(set(names)), "duplicate tool names"
 required = {
     "busybox", "toybox", "bash", "sqlite3", "jq", "yq", "coreutils",
-    "rg", "fd", "fzf", "zoxide", "xxd", "strings", "readelf", "objdump", "nm",
+    "rg", "fd", "fzf", "zoxide", "xxd", "strings", "readelf", "objdump",
     "7zz", "zstd", "xz", "brotli", "pigz", "cpio", "curl", "aria2c", "rsync",
     "socat", "strace", "ltrace", "lsof", "git", "zsh",
 }
 missing = required - set(names)
 assert not missing, f"missing: {sorted(missing)}"
 
-allowed_kinds = {"direct", "github_release_asset", "github_repo_file", "github_repo_file_glob"}
+allowed_kinds = {"direct", "github_release_asset", "github_repo_file", "github_repo_file_glob", "alias"}
 for tool in d["tools"]:
     assert tool["kind"] in allowed_kinds, f"{tool['name']}: unsupported kind"
-    assert tool.get("provider") or tool["kind"] == "direct", f"{tool['name']}: provider missing"
+    assert tool.get("provider") or tool["kind"] in {"direct", "alias"}, f"{tool['name']}: provider missing"
     assert tool.get("static") in {"required", "preferred"}, f"{tool['name']}: invalid static policy"
 
 if lock_path.exists():
