@@ -149,7 +149,27 @@ def list_backups(dest:Path) -> list[dict]:
             result.append({'name':p.name,'valid':False,'error':str(e)[:140]})
     return result
 
-def create_backup(config:Path, backups:Path, *, retain:int=5, check_recovery:bool=True) -> Path:
+def prune_backups(root:Path, retain:int=5) -> int:
+    """Prune only after the new backup AND caller's mutation are successful.
+
+    Unknown/corrupt snapshots block rotation, never get silently deleted.
+    """
+    if not 1<=retain<=30:raise Refused('Unsupported retention')
+    backup_root=_private_root(root)
+    previous=[p for p in sorted(backup_root.iterdir(),reverse=True)
+              if SNAPSHOT_RE.fullmatch(p.name) and p.is_dir() and not p.is_symlink()]
+    if len(previous)<=retain:return 0
+    # Verify every candidate first, so partial pruning cannot occur before
+    # an integrity or format failure is discovered.
+    for entry in previous:verify_backup(entry)
+    for old in previous[retain:]:shutil.rmtree(old)
+    fd=os.open(backup_root,os.O_RDONLY|os.O_DIRECTORY)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+    return len(previous)-retain
+
+def create_backup(config:Path, backups:Path, *, retain:int=5, check_recovery:bool=True,
+                  prune:bool=True) -> Path:
     if check_recovery:require_recovery()
     if retain<1 or retain>30:raise Refused('Unsupported retention')
     config=safe_dir(config)
@@ -199,13 +219,10 @@ def create_backup(config:Path, backups:Path, *, retain:int=5, check_recovery:boo
         dirfd=os.open(backup_root,os.O_RDONLY|os.O_DIRECTORY)
         try:os.fsync(dirfd)
         finally:os.close(dirfd)
-        # Only *after* the new backup passes full validation, prune old ones.
-        previous=[p for p in sorted(backup_root.iterdir(),reverse=True)
-                  if SNAPSHOT_RE.fullmatch(p.name) and p.is_dir() and not p.is_symlink()]
-        for old in previous[retain:]:
-            if old != final:
-                verify_backup(old)  # Never delete an unrecognized/corrupt backup.
-                shutil.rmtree(old)
+        # A pre-mutation snapshot should not evict an older restore point until
+        # its corresponding SQLite transaction commits successfully.
+        if prune:
+            prune_backups(backup_root,retain)
         return final
     finally:
         if temp.exists():shutil.rmtree(temp)

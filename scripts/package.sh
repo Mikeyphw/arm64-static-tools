@@ -51,5 +51,6 @@ VERSION=$(awk -F= '$1=="version"{print $2}' module/module.prop)
 OUT="$DIST_DIR/arm64-static-tools-${VERSION}.zip"
 rm -f "$OUT" "$OUT.sha256"
 (cd "$STAGE" && zip -qr "$OUT" .)
+python3 scripts/verify_module_zip.py "$OUT"
 sha256sum "$OUT" > "$OUT.sha256"
 printf '%s\n' "$OUT"

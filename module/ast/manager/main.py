@@ -151,18 +151,77 @@ def module_menu(root:Path):
 
 def vector_view(config:Path):
     details=vector.inspect_all(config)
-    if not details:emit('No offline SQLite databases found in '+str(config));return
+    if not details:
+        emit('No offline SQLite databases found in '+str(config));return
     for item in details:
-        heading('Vector offline database · read-only')
+        heading('Vector offline database · schema-qualified')
         table([{'Property':'File','Value':item['path']},
                {'Property':'Integrity','Value':item['integrity']},
-               {'Property':'Schema','Value':item['user_version']},
+               {'Property':'Schema version','Value':item['user_version']},
                {'Property':'Tables','Value':', '.join(item['tables'])},
-               {'Property':'Recognized modules','Value':item['schema_recognized']}],['Property','Value'])
+               {'Property':'Offline mutation','Value':'v5 qualified' if item['write_qualified'] else 'BLOCKED'}],
+              ['Property','Value'])
         if item['modules']:
             table([{'Package':x['package'],'State':'enabled' if x['enabled'] else 'disabled'}
                    for x in item['modules']],['Package','State'])
-        else:emit('Module schema not qualified. Offline writes are disabled until R03.')
+        if item['scopes']:
+            table([{'Module':x['package'],'Target':x['target'],'User':x['user_id']}
+                   for x in item['scopes']],['Module','Target','User'])
+        if not item['write_qualified']:
+            emit('Read-only: '+item['qualification_reason'])
+
+
+def vector_change(config:Path, dest:Path, action:str, module:str|None,
+                  *, target:str|None=None, user_id:int=0, targets:list[str]|None=None):
+    if not module:raise Refused('Exact registered module package required')
+    heading('Review Vector offline operation')
+    table([{'Parameter':'Module','Value':module},
+           {'Parameter':'Action','Value':action},
+           {'Parameter':'Target','Value':target if target is not None else ', '.join(targets or [])},
+           {'Parameter':'Android user','Value':user_id},
+           {'Parameter':'Backup','Value':'Verified automatic pre-write snapshot'}],
+          ['Parameter','Value'])
+    phrase='SCOPE SET' if action=='scope-set' else 'VECTOR WRITE'
+    if not yes('Writes run only in recovery and require a verified backup. No Android daemon is contacted.',
+               expect=phrase):
+        raise Refused('Typed confirmation required; no Vector changes made')
+    result=vector.mutate(config,module,action,target=target,user_id=user_id,
+                         targets=targets,backups_root=dest,confirmed=True)
+    table([{'Property':k,'Value':str(v)} for k,v in result.items()],['Property','Value'])
+
+
+def vector_menu(config:Path,dest:Path):
+    while True:
+        action=options('Vector / LSPosed · offline SQLite v5',[('list','Inspect modules and scopes'),
+            ('enable','Enable Xposed module'),('disable','Disable Xposed module'),
+            ('scope-add','Add scoped target'),('scope-remove','Remove scoped target'),
+            ('scope-set','Replace one Android user scope'),('back','Return to shell')])
+        if action in (None,'back'):return
+        if action=='list':vector_view(config);continue
+        qualified=[]
+        for item in vector.inspect_all(config):
+            if item['write_qualified'] and Path(item['path']).name==vector.DB_NAME:
+                qualified=item['modules'];break
+        if not qualified:
+            emit('Vector database v5 not qualified. Inspection is available; edits are blocked.')
+            continue
+        names=[m['package'] for m in qualified if m['package']!='lspd']
+        selection=options('Select Vector module',[(pkg,pkg) for pkg in names])
+        if selection is None:continue
+        target=None;targets=None;user=0
+        if action.startswith('scope-'):
+            emit('Android user ID (0 is owner). Empty input cancels:')
+            try:raw=input('User > ').strip()
+            except (EOFError,KeyboardInterrupt):continue
+            if not raw.isdecimal() or int(raw)>100000:
+                emit('Invalid user ID');continue
+            user=int(raw)
+            emit('Target package (system or com.example.app). For replace, separate names with spaces; "NONE" clears this user only.')
+            try:raw=input('Targets > ').strip()
+            except (EOFError,KeyboardInterrupt):continue
+            if action=='scope-set':targets=[] if raw=='NONE' else raw.split()
+            else:target=raw
+        vector_change(config,dest,action,selection,target=target,targets=targets,user_id=user)
 
 def backups_menu(config:Path, dest:Path):
     while True:
@@ -205,19 +264,19 @@ def doctor(config:Path, dest:Path) -> dict:
             'vector_db_count':len(vector.databases(config)),
             'backup_count':len(backups.list_backups(dest)),
             'py2droid_detected':Path('/data/adb/py2droid/usr/bin/python3').is_file(),
-            'offline':True,'vector_writes_enabled':False}
+            'offline':True,'vector_writes_enabled':any(x['write_qualified'] and Path(x['path']).name==vector.DB_NAME for x in vector.inspect_all(config))}
     return result
 
 def dashboard(config:Path,dest:Path,modules:Path):
     while True:
         action=options('AST Recovery · terminal-first dashboard',[
-            ('modules','Root module manager'),('vector','Vector/LSPosed · offline read-only'),
+            ('modules','Root module manager'),('vector','Vector/LSPosed · offline schema-qualified'),
             ('backups','Five-backup manager'),('doctor','System diagnostics'),
             ('shell','Return to Zsh / shell')])
         if action in (None,'shell'):return
         try:
             if action=='modules':module_menu(modules)
-            elif action=='vector':vector_view(config)
+            elif action=='vector':vector_menu(config,dest)
             elif action=='backups':backups_menu(config,dest)
             elif action=='doctor':table([{'Setting':k,'Value':str(v)} for k,v in doctor(config,dest).items()],['Setting','Value'])
         except (Refused,OSError,ValueError) as ex:emit('Refused: '+str(ex))
@@ -229,7 +288,7 @@ def main(argv=None) -> int:
     p.add_argument('--modules',default='/data/adb/modules',help=argparse.SUPPRESS)
     sub=p.add_subparsers(dest='command')
     sub.add_parser('menu');a=sub.add_parser('modules');a.add_argument('action',nargs='?',default='menu',choices=('menu','list','enable','disable','remove','undo-remove'));a.add_argument('identifier',nargs='?')
-    sub.add_parser('vector');b=sub.add_parser('backups');b.add_argument('action',nargs='?',default='menu',choices=('menu','list','create','restore'));b.add_argument('name',nargs='?')
+    v=sub.add_parser('vector');v.add_argument('action',nargs='?',default='menu',choices=('menu','list','enable','disable','scope-add','scope-remove','scope-set','scopes'));v.add_argument('identifier',nargs='?');v.add_argument('targets',nargs='*');v.add_argument('--user',type=int,default=0);b=sub.add_parser('backups');b.add_argument('action',nargs='?',default='menu',choices=('menu','list','create','restore'));b.add_argument('name',nargs='?')
     d=sub.add_parser('doctor');d.add_argument('--json',action='store_true');d.add_argument('--export',help='Write a minimal sanitized report to a new private file')
     x=p.parse_args(argv)
     config=Path(x.config);dest=Path(x.backups);modules=Path(x.modules)
@@ -239,7 +298,20 @@ def main(argv=None) -> int:
             if x.action=='menu':module_menu(modules)
             elif x.action=='list':table([vars(m) for m in root_modules.list_modules(modules)],['identifier','name','version','disabled','pending_removal'])
             else:module_action(modules,x.action,ident=x.identifier)
-        elif x.command=='vector':vector_view(config)
+        elif x.command=='vector':
+            if x.action=='menu':vector_menu(config,dest)
+            elif x.action in ('list','scopes'):vector_view(config)
+            elif x.action in ('scope-add','scope-remove'):
+                if len(x.targets)!=1:raise Refused('Exactly one scope target required')
+                vector_change(config,dest,x.action,x.identifier,target=x.targets[0],user_id=x.user)
+            elif x.action=='scope-set':
+                # Explicit NONE is the only CLI way to remove all targets for a user.
+                if not x.targets:raise Refused('Supply scoped targets, or NONE to clear this user')
+                selected=[] if x.targets==['NONE'] else x.targets
+                vector_change(config,dest,x.action,x.identifier,targets=selected,user_id=x.user)
+            else:
+                if x.targets:raise Refused('Unexpected extra module arguments')
+                vector_change(config,dest,x.action,x.identifier,user_id=x.user)
         elif x.command=='backups':
             if x.action=='menu':backups_menu(config,dest)
             elif x.action=='list':table(backups.list_backups(dest),['name','valid','created','files','error'])

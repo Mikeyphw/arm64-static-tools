@@ -217,3 +217,18 @@ raw WAL-file copies. Restore requires real recovery and an explicit typed
 confirmation, and retains the original configuration as a rollback directory.
 
 See [R02 design and validation](docs/RECOVERY_R02.md).
+
+## R03 — Version-qualified offline Vector edits
+
+`ast vector` launches an in-terminal Rich/fzf menu, preserving Zsh and the
+existing `ast vector list` read-only inspection. From recovery, a verified
+Vector **v5** database supports confirmed module enable/disable and per-user
+scope add/remove/set. Every edit creates and verifies a consistent Vector
+configuration backup *before* opening a writable transaction. Other Vector or
+LSPosed schema versions remain read-only, not forcibly migrated. See
+[docs/RECOVERY_R03.md](docs/RECOVERY_R03.md) for safety, limitations and
+physical recovery qualification gates.
+
+The module's ZIP is verified by `scripts/verify_module_zip.py` at packaging
+time. The static Python distribution is still sourced only from exact SHA-256
+pinned upstream archives. No third-party native interpreter is required.

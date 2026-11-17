@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
 import stat
@@ -72,6 +73,70 @@ def secure_member(path:str,prefix:str):
         raise Refused('Unsafe archive path: '+path)
     return name
 
+def materialize_python_links(out:Path, symlinks:list[tuple[Path,str]]):
+    """Materialize legitimate in-root aliases, never install filesystem links."""
+    # Legitimate Python archives can contain chained aliases such as
+    # python -> python3 -> python3.12 or pydoc -> pydoc3 -> pydoc3.12.
+    # Resolve the complete alias graph in the archive namespace, with an
+    # explicit depth/cycle limit, before writing any aliases. Materialize only
+    # verified in-tree regular files or bounded nonrecursive directories.
+    aliases={}
+    for dst,link in symlinks:
+        relative=dst.relative_to(out).as_posix()
+        if (relative in aliases or not link or link.startswith('/')
+                or '\\' in link or '\x00' in link):
+            raise Refused('Unsafe or duplicate Python symlink')
+        aliases[relative]=link
+
+    def resolve_alias(relative:str) -> Path:
+        seen=set()
+        for _ in range(16):
+            if relative in seen:raise Refused('Cyclic Python symlink chain')
+            seen.add(relative)
+            link=aliases.get(relative)
+            if link is None:return out.joinpath(*relative.split('/'))
+            next_name=posixpath.normpath(posixpath.join(posixpath.dirname(relative),link))
+            if (next_name in ('.','..') or next_name.startswith('../')
+                    or next_name.startswith('/') or not next_name):
+                raise Refused('External Python symlink target')
+            relative=next_name
+        raise Refused('Python symlink chain too deep')
+
+    resolved={}
+    for name in aliases:
+        target=resolve_alias(name)
+        dest=out.joinpath(*name.split('/'))
+        if (dest.exists() or dest.is_symlink() or
+                not target.resolve().is_relative_to(out.resolve())):
+            raise Refused('Unsafe Python symlink destination')
+        if not ((target.is_file() or target.is_dir()) and not target.is_symlink()):
+            raise Refused('Dangling/unsupported Python symlink')
+        resolved[name]=target
+
+    for name,target in resolved.items():
+        dst=out.joinpath(*name.split('/'))
+        if target.is_file():
+            if target.stat().st_size>125*1024*1024:
+                raise Refused('Oversized Python symlink target')
+            dst.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(target,dst,follow_symlinks=False)
+        else:
+            if (dst==out or target==out or dst.is_relative_to(target)
+                    or target.is_relative_to(dst)):
+                raise Refused('Cyclic Python directory symlink')
+            count=0;size=0
+            for root,dirs,files in os.walk(target,followlinks=False):
+                for part in dirs+files:
+                    node=Path(root)/part
+                    if node.is_symlink():raise Refused('Nested Python directory symlink')
+                for part in files:
+                    node=Path(root)/part
+                    if not node.is_file():raise Refused('Unexpected Python directory entry')
+                    count+=1;size+=node.stat().st_size
+                    if count>5000 or size>180*1024*1024:
+                        raise Refused('Oversized Python directory alias')
+            shutil.copytree(target,dst,symlinks=False)
+
 def extract_cpython(archive:Path,out:Path):
     if not shutil.which('zstd'):raise Refused('zstd host decompressor required')
     # Never execute the archive. Reject devices/hardlinks and escaping symlinks.
@@ -100,16 +165,7 @@ def extract_cpython(archive:Path,out:Path):
                 elif member.issym():symlinks.append((dst,member.linkname))
                 else:raise Refused('Disallowed Python archive entry '+name)
         if p.wait()!=0:raise Refused('Python zstd decode failed')
-        # Resolve only in-tree relative file aliases to ordinary files; no
-        # filesystem symlinks are carried into the module ZIP.
-        for dst,link in symlinks:
-            if link.startswith('/') or '..' in PurePosixPath(link).parts:
-                raise Refused('Unsafe Python symlink')
-            resolved=(dst.parent/link).resolve()
-            if not resolved.is_relative_to(out.resolve()) or not resolved.is_file():
-                raise Refused('Dangling/escaping Python symlink')
-            dst.parent.mkdir(parents=True,exist_ok=True)
-            shutil.copy2(resolved,dst)
+        materialize_python_links(out,symlinks)
     finally:
         if p.poll() is None:p.kill();p.wait()
     # Important: build's Python aliases can differ; only expose a stable path

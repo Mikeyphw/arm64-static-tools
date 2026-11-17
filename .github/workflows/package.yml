@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 6 * * 1'
+  pull_request:
   push:
     paths:
       - 'manifest/**'
@@ -12,6 +13,7 @@ on:
       - 'Makefile'
       - 'tests/**'
       - 'updates/**'
+      - 'docs/**'
       - '.github/workflows/package.yml'
 
 jobs:
@@ -20,16 +22,19 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Pull requests are checked at their exact head, not the synthetic merge ref.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Host prerequisites
         run: sudo apt-get update && sudo apt-get install -y file binutils zip zstd
-      - name: Verify source-only repository
+      - name: Verify committed source
         run: make check
-      - name: Resolve and qualify current ARM64 prebuilts
+      - name: Fetch and qualify exact committed ARM64 lock
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make update
-      - name: Package exact resolved lock
+        run: make fetch
+      - name: Package exact committed ARM64 lock and static Python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make package
@@ -40,6 +45,27 @@ jobs:
             dist/*.zip
             dist/*.sha256
             build/provenance.json
+            manifest/lock.json
+          if-no-files-found: error
+
+  update-report:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host prerequisites
+        run: sudo apt-get update && sudo apt-get install -y file binutils zip zstd
+      - name: Check upstream prebuilt updates without publishing changed lock
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make update
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upstream-update-review
+          path: |
             build/update-report.md
             build/update-report.json
             manifest/lock.json
+          if-no-files-found: error
