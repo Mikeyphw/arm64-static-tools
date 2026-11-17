@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FORBIDDEN_PREFIXES = ("build/", "dist/", ".cache/", ".artifacts/", "module/system/bin/")
 FORBIDDEN_SUFFIXES = (
     ".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".tar.zst", ".7z",
-    ".apk", ".elf", ".so", ".bin",
+    ".apk", ".elf", ".so", ".bin", ".pyc", ".pyo",
 )
 MAGICS = {
     b"\x7fELF": "ELF",

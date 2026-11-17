@@ -157,3 +157,109 @@ make install     # package locked set + try local root-manager installation
 make clean       # remove repo-local generated metadata/artifacts only
 make clean-cache # remove external downloaded-binary cache
 ```
+
+## Recovery shell (R01)
+
+With `/data` mounted and decrypted, use `sh /data/local/tmp/ast` to enter the
+standalone Zsh recovery shell. `sh /data/local/tmp/ast doctor` checks available
+tools, `sh /data/local/tmp/ast safe` bypasses Zinit, and
+`sh /data/local/tmp/ast -- jq --version` runs a command in AST's environment.
+The launcher remains available if systemless PATH mounting is inactive.
+The launcher does not auto-mount, decrypt, flash or fetch updates.
+
+The offline Zinit bundle is built from pinned Git commits and trees in
+`manifest/plugins.json` into the ZIP staging directory, not vendored into Git.
+Plugin sources are downloaded only at package-build time, never in recovery.
+`ast menu` remains a terminal entry point until the Rich dashboard in R02.
+
+Optional LSD and Oh My Posh prebuilts are approved in `manifest/sources.json`
+with static ELF qualification. After `make update`, commit the new lockfile.
+Prompts default to a recovery-safe ASCII-compatible style; Nerd Fonts inside
+PitchBlack require separate renderer/font verification.
+
+## Root-manager update channel
+
+See [docs/UPDATES.md](docs/UPDATES.md). `make update` changes binary lock
+metadata, **not** the installed module. A stable module update requires
+explicit release publishing using `.github/workflows/release.yml`, which
+checks the pinned toolset, monotonic module `versionCode`, ZIP integrity,
+and publishes `update.json`, changelog and ZIP as one stable release.
+The `updateJson` manager feed is stamped only with verified
+`AST_RELEASE_REPOSITORY=owner/repo` or a canonical GitHub `origin`. No URL
+is invented for unbound local builds.
+
+## R02 — Rich recovery dashboard and embedded static Python
+
+AST now packages a **prebuilt and SHA256-pinned ARM64 musl static CPython** plus
+pinned pure-Python Rich dependencies from `manifest/python-runtime.json`.
+Host-only packaging requires `readelf` and `zstd`; the actual ARM64 interpreter
+is not executed during a cross-platform build. A physical recovery acceptance
+run is required before claiming device compatibility.
+
+The terminal stays primary. Use `sh /data/local/tmp/ast` to enter Zsh,
+`ast menu` for a Rich/fzf in-terminal dashboard, `ast modules` for KernelSU /
+Magisk / APatch state, `ast vector` for **read-only** SQLite inspection,
+`ast backups` for five verified Vector backups, `ast python` for the bundled
+interpreter, and `ast --safe` if Python or Zinit fails. `ast py2droid` is an
+optional diagnostic-only probe; no Py2Droid scripts or environments are automatically
+sourced. Exiting menus returns to the invoking terminal.
+
+Backend rules: use `ksud module` only if its native executable is available;
+otherwise require recovery-mode confirmation for filesystem `disable` / `remove`
+markers. No implicit bootloop rescue or silent enabling/disabling. Vector
+database editing and scopes are **out of R02**, reserved for the qualified R03
+schema-specific implementation. Unknown SQLite layouts remain read-only.
+
+Vector backups default to `/data/adb/arm64-static-tools/backups`; an existing
+secured `/data/local/tmp/lspd-backups` can be selected using the
+`AST_BACKUPS` environment variable. SQLite snapshots use the backup API, not
+raw WAL-file copies. Restore requires real recovery and an explicit typed
+confirmation, and retains the original configuration as a rollback directory.
+
+See [R02 design and validation](docs/RECOVERY_R02.md).
+
+## R03 — Version-qualified offline Vector edits
+
+`ast vector` launches an in-terminal Rich/fzf menu, preserving Zsh and the
+existing `ast vector list` read-only inspection. From recovery, a verified
+Vector **v5** database supports confirmed module enable/disable and per-user
+scope add/remove/set. Every edit creates and verifies a consistent Vector
+configuration backup *before* opening a writable transaction. Other Vector or
+LSPosed schema versions remain read-only, not forcibly migrated. See
+[docs/RECOVERY_R03.md](docs/RECOVERY_R03.md) for safety, limitations and
+physical recovery qualification gates.
+
+The module's ZIP is verified by `scripts/verify_module_zip.py` at packaging
+time. The static Python distribution is still sourced only from exact SHA-256
+pinned upstream archives. No third-party native interpreter is required.
+
+## R04 — Opt-in PitchBlack Nerd Mono theme
+
+AST can build a **separate** GUI-terminal font theme from a user-supplied PBRP
+base theme ZIP and a licensed Nerd Font Mono TTF; it does **not** install
+fonts, modify the recovery image or download a font. The dedicated host
+command is `python3 scripts/build_pbrp_nerd_theme.py --help`.
+The recovery command `ast font doctor|sample|confirm|reset` can guide manual
+qualification of Powerline glyphs; unverified recovery terminals retain the
+compact ASCII-safe prompt. See [R04 guide](docs/RECOVERY_R04.md).
+
+The Toybox lock now uses the immutable 0.8.14 release directory with the
+previously approved exact executable digest instead of the mutable `/latest/`
+URL. CI continues to refuse any checksum drift.
+
+## Exact-lock CI and duplicate event prevention
+
+CI packages the **committed** lock, without running `make update` in a PR.
+The package workflow runs on pull requests for feature branches, and on `push`
+only after changes reach the default `master` branch; feature-branch pushes do
+not start a second copy of the same workflow. Superseded runs for the same PR
+are cancelled; a cancelled run is not a pass. The weekly report job remains
+separate from release qualification.
+
+`7zz` is intentionally source-bound to the verified GitHub commit
+`5ea67098a9bf2e32d6a85ef9775a19bf147b6285`, not upstream `main`.
+The reviewed executable digest is `265e45b5847392c0cd97a84acb6b3f9933c3e43d698fb5a2979f5e9a80c05758`,
+size 3,105,552 bytes, matching the observed CI download and upstream Git blob.
+`make fetch` must still verify that exact SHA and the ARM64 static ELF properties.
+`make update` is a distinct, explicit metadata-discovery operation; future
+source changes require another reviewed source lock commit.

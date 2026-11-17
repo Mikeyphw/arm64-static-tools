@@ -22,6 +22,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+import urllib.parse
 import zipfile
 from pathlib import Path
 
@@ -132,14 +133,37 @@ def latest_asset(repo: str, regex: str):
     )
 
 def repo_file(repo: str, paths: list[str]):
-    for p in paths:
+    """Resolve a repository file at an exact commit, never at moving HEAD.
+
+    The manifest may point at current approved upstream sources for *update*
+    discovery, but the resulting metadata lock must contain an immutable URL.
+    Every contents lookup is bound to the resolved commit so a branch movement
+    between the two GitHub API requests cannot change what gets qualified.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise RuntimeError("invalid GitHub repository identity")
+    metadata = req_json(f"https://api.github.com/repos/{repo}")
+    branch = metadata.get("default_branch")
+    if not isinstance(branch, str) or not re.fullmatch(r"[A-Za-z0-9_.\-/]+", branch) or ".." in branch:
+        raise RuntimeError(f"{repo}: invalid default branch")
+    encoded_branch = urllib.parse.quote(branch, safe="/")
+    ref = req_json(f"https://api.github.com/repos/{repo}/git/refs/heads/{encoded_branch}")
+    commit = ref.get("object", {}).get("sha")
+    if ref.get("object", {}).get("type") != "commit" or not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise RuntimeError(f"{repo}: cannot pin an exact upstream commit")
+    for path in paths:
+        if not isinstance(path, str) or not path or path.startswith("/") or "\\" in path or ".." in Path(path).parts:
+            raise RuntimeError(f"{repo}: unsafe file path")
+        encoded_path = urllib.parse.quote(path, safe="/")
         try:
-            meta = req_json(f"https://api.github.com/repos/{repo}/contents/{p}")
-            if meta.get("download_url"):
-                return meta.get("sha") or "repo", meta["download_url"], Path(p).name
+            file_meta = req_json(f"https://api.github.com/repos/{repo}/contents/{encoded_path}?ref={commit}")
         except Exception:
-            pass
-    raise RuntimeError(f"{repo}: none of candidate paths exist: {paths}")
+            continue
+        if not isinstance(file_meta, dict) or file_meta.get("type") != "file" or not re.fullmatch(r"[0-9a-f]{40}", str(file_meta.get("sha", ""))):
+            continue
+        url = f"https://raw.githubusercontent.com/{repo}/{commit}/{encoded_path}"
+        return commit, url, Path(path).name
+    raise RuntimeError(f"{repo}: no ordinary file at commit {commit} for {paths}")
 
 
 _REPO_TREE_CACHE = {}

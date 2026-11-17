@@ -1,0 +1,69 @@
+name: Stable ARM64 module release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prerequisites
+        run: sudo apt-get update && sudo apt-get install -y file binutils zip zstd
+      - name: Validate source and locked binary inputs
+        run: make check && make fetch
+      - name: Build release (no implicit prebuilt updates)
+        env:
+          AST_RELEASE_REPOSITORY: ${{ github.repository }}
+        run: make package
+      - name: Validate release against published version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version=//p' module/module.prop)
+          version_code=$(sed -n 's/^versionCode=//p' module/module.prop)
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Refusing existing release $tag" >&2; exit 1
+          fi
+          old=0
+          if gh api "repos/${GH_REPO}/releases/latest" > "$RUNNER_TEMP/latest.json" 2>/dev/null; then
+            # Existing stable release must have a valid update feed; never
+            # treat missing/broken metadata as a fresh first release.
+            if ! python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert_sum=sum(a["name"]=="update.json" for a in r["assets"]); sys.exit(0 if assert_sum==1 else 1)' "$RUNNER_TEMP/latest.json"; then
+              echo 'Existing stable release has no unique update.json' >&2; exit 1
+            fi
+            feed_url="https://github.com/${GH_REPO}/releases/latest/download/update.json"
+            curl -fLsS --proto '=https' --tlsv1.2 "$feed_url" -o "$RUNNER_TEMP/previous.json"
+            old=$(python3 -c 'import json,sys;print(int(json.load(open(sys.argv[1]))["versionCode"]))' "$RUNNER_TEMP/previous.json")
+          fi
+          if (( version_code <= old )); then
+            echo "Refusing non-monotonic versionCode $version_code <= $old" >&2; exit 1
+          fi
+          python3 scripts/release_metadata.py --repo "$GH_REPO" \
+            --zip "dist/arm64-static-tools-${version}.zip" \
+            --notes updates/CHANGELOG.md --out build/stable-release \
+            $(if test -f "$RUNNER_TEMP/previous.json"; then printf '%s %s' --previous "$RUNNER_TEMP/previous.json"; fi)
+      - name: Publish verified draft then make stable release visible
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version=//p' module/module.prop)
+          pkg="dist/arm64-static-tools-${version}.zip"
+          gh release create "v${version}" --draft --title "AST v${version}" \
+            --notes-file updates/CHANGELOG.md \
+            "$pkg" build/stable-release/update.json build/stable-release/changelog.md \
+            "build/stable-release/$(basename "$pkg").sha256" build/stable-release/integrity.json
+          gh release edit "v${version}" --draft=false --latest

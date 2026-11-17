@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "repository": "Mikeyphw/arm64-static-tools",
+  "base_branch": "feature/ast-recovery-ci-qualification-20261117",
+  "event": "pull_request",
+  "release_qualification": "separate",
+  "required_workflows": [
+    {
+      "name": "Package ARM64 module",
+      "workflow_id": 420937101
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "python": {
+    "project": "astral-sh/python-build-standalone",
+    "release": "20260901",
+    "version": "3.12.14",
+    "asset": "cpython-3.12.14+20260901-aarch64-unknown-linux-musl-noopt+static-full.tar.zst",
+    "sha256": "8dc3fb8d88bdef63e3ad595b444f2339223f5e80bcbefd010317702ce4df653e",
+    "expected_arch": "AArch64",
+    "expected_static": true
+  },
+  "wheels": [
+    {"project": "rich", "version": "14.2.0", "asset": "rich-14.2.0-py3-none-any.whl", "sha256": "76bc51fe2e57d2b1be1f96c524b890b816e334ab4c1e45888799bfaab0021edd"},
+    {"project": "Pygments", "version": "2.19.2", "asset": "pygments-2.19.2-py3-none-any.whl", "sha256": "86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b"},
+    {"project": "markdown-it-py", "version": "4.0.0", "asset": "markdown_it_py-4.0.0-py3-none-any.whl", "sha256": "87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147"},
+    {"project": "mdurl", "version": "0.1.2", "asset": "mdurl-0.1.2-py3-none-any.whl", "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"}
+  ]
+}
